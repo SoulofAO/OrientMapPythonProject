@@ -318,6 +318,7 @@ class HeightMapGenerator:
         while len(availible_lines) > 1:
             line = availible_lines[0]
 
+            # Если линия замкнута (первая точка равна последней) и она не внутри полигона
             if (line[0] == line[len(line) - 1]) and not self.border_polygon.contains(
                     Point(line[0])) and not self.border_polygon.contains(Point(line[len(line) - 1])):
                 answer_lines.append(availible_lines[0])
@@ -328,36 +329,48 @@ class HeightMapGenerator:
                 optimal_start_point_to_merge_index = -1
                 optimal_end_point_to_merge_index = -1
 
+                # Проверка минимального расстояния между первой и последней точками самой линии
+                self_distance = (line[0][0] - line[len(line) - 1][0]) ** 2 + (line[0][1] - line[len(line) - 1][1]) ** 2
+
+                if self_distance < optimal_line_const and self_distance < self.max_merge_line_value:
+                    optimal_line_const = self_distance
+                    optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
+
+                # Поиск оптимальной линии для слияния
                 k = 0
                 for test_line in availible_lines:
-                    if test_line[0] != test_line[len(test_line) - 1]:
-                        if (test_line != line):
-                            test_distance = (test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
-                                    test_line[len(test_line) - 1][1] - line[0][1]) ** 2
-                            if test_distance < optimal_line_const:
+                    if test_line == line:  # Проверяем, если линия сама собой, пропускаем до конца цикла
+                        continue
+
+                    if test_line[0] != test_line[len(test_line) - 1]:  # Проверка, что линия не замкнута
+
+                        # Проверка возможных точек для слияния
+                        test_distances = [
+                            ((test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2, 0, 0),
+                            ((test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
+                                        test_line[len(test_line) - 1][1] - line[0][1]) ** 2, 0, len(test_line) - 1),
+                            ((test_line[len(test_line) - 1][0] - line[len(line) - 1][0]) ** 2 + (
+                                        test_line[len(test_line) - 1][1] - line[len(line) - 1][1]) ** 2, len(line) - 1,
+                             len(test_line) - 1),
+                            ((test_line[0][0] - line[len(line) - 1][0]) ** 2 + (
+                                        test_line[0][1] - line[len(line) - 1][1]) ** 2, len(line) - 1, 0)
+                        ]
+
+                        for test_distance, start_idx, end_idx in test_distances:
+                            if test_distance < optimal_line_const and test_distance < self.max_merge_line_value:
                                 optimal_line_const = test_distance
-
-
-                            test_distances = [
-                                ((test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2, 0, 0),
-                                ((test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
-                                            test_line[len(test_line) - 1][1] - line[0][1]) ** 2, 0, len(test_line) - 1),
-                                ((test_line[len(test_line) - 1][0] - line[len(line) - 1][0]) ** 2 + (
-                                            test_line[len(test_line) - 1][1] - line[len(line) - 1][1]) ** 2, len(line) - 1,
-                                 len(test_line) - 1),
-                                ((test_line[0][0] - line[len(line) - 1][0]) ** 2 + (
-                                            test_line[0][1] - line[len(line) - 1][1]) ** 2, len(line) - 1, 0)
-                            ]
-
-                            for test_distance, start_idx, end_idx in test_distances:
-                                if test_distance < optimal_line_const and test_distance < self.max_merge_line_value:
-                                    optimal_line_const = test_distance
-                                    optimal_line_to_merge_index = k
-                                    optimal_start_point_to_merge_index = start_idx
-                                    optimal_end_point_to_merge_index = end_idx
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = start_idx
+                                optimal_end_point_to_merge_index = end_idx
                     k += 1
 
-                if optimal_line_to_merge_index != -1:
+                # Если нашлась линия для объединения или линия замыкает сама себя
+                if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
+                    line.append(line[0])  # Добавляем первую точку в конец для замыкания
+                    answer_lines.append(line)
+                    del availible_lines[0]
+                elif optimal_line_to_merge_index != -1:
+                    # Соединение линий
                     line_to_merge = availible_lines[optimal_line_to_merge_index]
 
                     if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
@@ -369,11 +382,13 @@ class HeightMapGenerator:
                         line = line + line_to_merge[::-1]
                     elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
                         line = line + line_to_merge
+
                     del availible_lines[optimal_line_to_merge_index]
                 else:
                     answer_lines.append(availible_lines[0])
                     del availible_lines[0]
 
+        # Добавляем последнюю оставшуюся линию, если она есть
         if availible_lines:
             answer_lines.append(availible_lines[0])
 
