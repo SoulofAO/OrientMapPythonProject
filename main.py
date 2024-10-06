@@ -314,10 +314,12 @@ class HeightMapGenerator:
     def MergeNearLines(self, lines):
         answer_lines = []
         availible_lines = lines.copy()
-        while len(availible_lines)>1:
+
+        while len(availible_lines) > 1:
             line = availible_lines[0]
-            if (line[0] == line[len(line) - 1]) and not self.border_polygon.contains(Point(line[0])) and not self.border_polygon.contains(
-                    Point(line[len(line)-1])):
+
+            if (line[0] == line[len(line) - 1]) and not self.border_polygon.contains(
+                    Point(line[0])) and not self.border_polygon.contains(Point(line[len(line) - 1])):
                 answer_lines.append(availible_lines[0])
                 del availible_lines[0]
             else:
@@ -325,47 +327,56 @@ class HeightMapGenerator:
                 optimal_line_to_merge_index = -1
                 optimal_start_point_to_merge_index = -1
                 optimal_end_point_to_merge_index = -1
+
                 k = 0
                 for test_line in availible_lines:
-                    if (test_line[0] != test_line[len(test_line) - 1]):
-                        if self.border_polygon.contains(Point(test_line[0])) and self.border_polygon.contains(
-                                Point(line[len(line)-1])):
-
-                            test_distance = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
-                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
+                    if test_line[0] != test_line[len(test_line) - 1]:
+                        if (test_line != line):
+                            test_distance = (test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
+                                    test_line[len(test_line) - 1][1] - line[0][1]) ** 2
+                            if test_distance < optimal_line_const:
                                 optimal_line_const = test_distance
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = 0
-                                optimal_end_point_to_merge_index = 0
 
-                            test_distance = (test_line[len(test_line)-1][0] - line[0][0]) ** 2 + (test_line[len(test_line)-1][1] - line[0][1]) ** 2
-                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
-                                optimal_line_const = test_distance
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = 0
-                                optimal_end_point_to_merge_index = len(availible_lines)-1
 
-                            test_distance = (test_line[len(test_line)-1][0] - line[len(line)-1][0]) ** 2 + (test_line[len(test_line)-1][1] - line[len(line)-1][1]) ** 2
-                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
-                                optimal_line_const = test_distance
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = len(line)-1
-                                optimal_end_point_to_merge_index = len(availible_lines)-1
+                            test_distances = [
+                                ((test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2, 0, 0),
+                                ((test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
+                                            test_line[len(test_line) - 1][1] - line[0][1]) ** 2, 0, len(test_line) - 1),
+                                ((test_line[len(test_line) - 1][0] - line[len(line) - 1][0]) ** 2 + (
+                                            test_line[len(test_line) - 1][1] - line[len(line) - 1][1]) ** 2, len(line) - 1,
+                                 len(test_line) - 1),
+                                ((test_line[0][0] - line[len(line) - 1][0]) ** 2 + (
+                                            test_line[0][1] - line[len(line) - 1][1]) ** 2, len(line) - 1, 0)
+                            ]
 
-                            test_distance = (test_line[0][0] - line[len(line)-1][0]) ** 2 + (test_line[0][1] - line[len(line)-1][1]) ** 2
-                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
-                                optimal_line_const = test_distance
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = len(line)-1
-                                optimal_end_point_to_merge_index = 0
-                    k = k + 1
+                            for test_distance, start_idx, end_idx in test_distances:
+                                if test_distance < optimal_line_const and test_distance < self.max_merge_line_value:
+                                    optimal_line_const = test_distance
+                                    optimal_line_to_merge_index = k
+                                    optimal_start_point_to_merge_index = start_idx
+                                    optimal_end_point_to_merge_index = end_idx
+                    k += 1
 
-                if(optimal_line_to_merge_index!=-1):
-                    //Дописать код.
-                    line = line + availible_lines[optimal_line_to_merge_index]
+                if optimal_line_to_merge_index != -1:
+                    line_to_merge = availible_lines[optimal_line_to_merge_index]
+
+                    if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
+                        line = line_to_merge[::-1] + line
+                    elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line) - 1:
+                        line = line + line_to_merge
+                    elif optimal_start_point_to_merge_index == len(
+                            line) - 1 and optimal_end_point_to_merge_index == len(line_to_merge) - 1:
+                        line = line + line_to_merge[::-1]
+                    elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
+                        line = line + line_to_merge
                     del availible_lines[optimal_line_to_merge_index]
                 else:
+                    answer_lines.append(availible_lines[0])
                     del availible_lines[0]
+
+        if availible_lines:
+            answer_lines.append(availible_lines[0])
+
         return answer_lines
 
     def FixLine(self, line):
