@@ -22,10 +22,10 @@ class HeightMapGenerator:
         self.availible_parce_data = ["Contour","Index contour"]
         self.first_level_distance = 50 * self.global_scale_multiplier
         self.merge_point_value = 0*self.global_scale_multiplier
-        self.max_merge_line_value = 500*self.global_scale_multiplier
+        self.max_merge_line_value = 1000*self.global_scale_multiplier
 
         self.border_polygon = None
-        self.border_distance = 0;
+        self.border_distance = 20;
         self.max_border_polygon = None
         self.max_distance_to_border_polygon = 100
         self.draw_with_max_border_polygon = True
@@ -315,7 +315,7 @@ class HeightMapGenerator:
         answer_lines = []
         availible_lines = lines.copy()
 
-        while len(availible_lines) > 1:
+        while len(availible_lines) >= 1:
             line = availible_lines[0]
 
             # Если линия замкнута (первая точка равна последней) и она не внутри полигона
@@ -340,6 +340,7 @@ class HeightMapGenerator:
                 k = 0
                 for test_line in availible_lines:
                     if test_line == line:  # Проверяем, если линия сама собой, пропускаем до конца цикла
+                        k = k + 1
                         continue
 
                     if test_line[0] != test_line[len(test_line) - 1]:  # Проверка, что линия не замкнута
@@ -382,13 +383,13 @@ class HeightMapGenerator:
                         line = line + line_to_merge[::-1]
                     elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
                         line = line + line_to_merge
+                    availible_lines[0] = line
 
                     del availible_lines[optimal_line_to_merge_index]
                 else:
                     answer_lines.append(availible_lines[0])
                     del availible_lines[0]
 
-        # Добавляем последнюю оставшуюся линию, если она есть
         if availible_lines:
             answer_lines.append(availible_lines[0])
 
@@ -396,7 +397,7 @@ class HeightMapGenerator:
 
     def FixLine(self, line):
             if (line[0] != line[len(line) - 1]):
-                if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)])):
+                if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)-1])):
                     G = self.create_graph_from_polygon(self.max_border_polygon, self.hight_find_direction)
 
                     projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line[0])
@@ -421,7 +422,7 @@ class HeightMapGenerator:
                         line.append(path_points[len(path_points) - 1])
                     return True
                 else:
-                    exit()
+                    print("Fatal Error - Border non closest line" + str(line))
             return False
 
 
@@ -537,7 +538,7 @@ class HeightMapGenerator:
             lines = self.GenerateLinesByLineData(data_lines)
             line_library.PrintLinesFromLines(lines)
             print(self.width, self.height)
-            self.DebugDrawLines(lines)
+            self.DrawPlotHeightMap(lines)
 
 heightmap_generator = HeightMapGenerator()
 heightmap_generator.Launch()
