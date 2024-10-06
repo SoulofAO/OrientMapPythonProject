@@ -192,26 +192,6 @@ class HeightMapGenerator:
         point = Point(point)
         min_distance = float('inf')
         projection_point = None
-
-        for i in range(len(coords) - 1):
-            line_segment = [Point(coords[i]), Point(coords[i + 1])]
-            projection = self.project_point_onto_line_segment(point, line_segment)
-            distance = point.distance(projection)
-
-            if distance < min_distance:
-                min_distance = distance
-                projection_point = projection
-
-        return projection_point
-
-    from shapely.geometry import Polygon, Point, LineString
-    import numpy as np
-
-    def direction_point_from_border_polygon(self, border_polygon, point):
-        coords = list(border_polygon.exterior.coords)
-        point = Point(point)
-        min_distance = float('inf')
-        projection_point = None
         closest_segment = None
 
         for i in range(len(coords) - 1):
@@ -243,6 +223,18 @@ class HeightMapGenerator:
 
         return Point(projection_x, projection_y)
 
+    def GenerateLinesByLineData(self,lines_data):
+        lines_coords = []
+        for line_data in lines_data:
+            updated_coords = []
+            for coord in line_data:
+                x = coord[0]
+                y = coord[1]
+                updated_coords.append([x,y])
+            lines_coords.append(updated_coords)
+        self.SetupSizeDataFromLines(lines_coords)
+        return self.GeneratedLineByCoords(lines_coords)
+
     def FixLine(self, line):
         if (line[0] != line[len(line) - 1]):
             projection_point, closest_segment =self.direction_point_from_border_polygon(self.border_polygon, line[0])
@@ -254,7 +246,6 @@ class HeightMapGenerator:
             x_coordinate_end = projection_point.x
             y_coordinate_end = projection_point.y
             line.append((x_coordinate_end, y_coordinate_end))
-
 
     def GeneratedLineByCoords(self, lines_coords):
         lines = []
