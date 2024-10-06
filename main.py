@@ -1,14 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, LineString
 from PIL import Image, ImageDraw
 import helper_functions as helper_functions
 import line as line_library
 from shapely.ops import nearest_points
+import networkx as nx
+
 
 class HeightMapGenerator:
     def __init__(self):
-        self.global_scale_multiplier = 0.1
+        self.global_scale_multiplier = 0.2
         self.image_width = 2000* self.global_scale_multiplier
         self.image_height = 2000 * self.global_scale_multiplier
 
@@ -19,11 +21,19 @@ class HeightMapGenerator:
 
         self.availible_parce_data = ["Contour","Index contour"]
         self.first_level_distance = 50 * self.global_scale_multiplier
-        self.merge_value = 0*self.global_scale_multiplier
+        self.merge_point_value = 0*self.global_scale_multiplier
+        self.max_merge_line_value = 500*self.global_scale_multiplier
+
         self.border_polygon = None
+        self.border_distance = 0;
         self.max_border_polygon = None
         self.max_distance_to_border_polygon = 100
         self.draw_with_max_border_polygon = True
+        self.direction_height_finding = True
+        self.hight_find_direction = "both"
+
+        self.apply_unborder_draw = True
+        self.apply_merge_line_value = True
 
     def ParseAllFromData(self, data):
         lines = []
@@ -101,18 +111,22 @@ class HeightMapGenerator:
         self.min_width = min_width
         self.min_height = min_height
 
+
         unfinished_lines = []
         for line in lines_coords:
             if(line[0] != line[len(line) - 1]):
                 unfinished_lines.append(line)
 
-        self.border_polygon = Polygon([(self.min_width+1, self.min_height+1), (self.max_width-1, self.min_height+1),
-                 (self.max_width-1, self.max_height-1),
-                 (self.min_width+1, self.max_height-1)])
-        self.max_border_polygon = Polygon([(self.min_width+self.max_distance_to_border_polygon, self.min_height+self.max_distance_to_border_polygon),
-                                           (self.max_width-self.max_distance_to_border_polygon, self.min_height+self.max_distance_to_border_polygon),
-                 (self.max_width-self.max_distance_to_border_polygon, self.max_height-self.max_distance_to_border_polygon),
-                 (self.min_width+self.max_distance_to_border_polygon, self.max_height-self.max_distance_to_border_polygon)])
+        self.border_polygon = Polygon([(self.min_width+self.border_distance, self.min_height+self.border_distance),
+                                       (self.max_width-self.border_distance, self.min_height+self.border_distance),
+                 (self.max_width-self.border_distance, self.max_height-self.border_distance),
+                 (self.min_width+self.border_distance, self.max_height-self.border_distance)])
+        self.max_border_polygon = Polygon([(self.min_width-self.max_distance_to_border_polygon, self.min_height-self.max_distance_to_border_polygon),
+                                           (self.max_width+self.max_distance_to_border_polygon, self.min_height-self.max_distance_to_border_polygon),
+                 (self.max_width+self.max_distance_to_border_polygon, self.max_height+self.max_distance_to_border_polygon),
+                 (self.min_width-self.max_distance_to_border_polygon, self.max_height+self.max_distance_to_border_polygon)])
+
+
 
     def DebugDrawLines(self,lines):
         if(not self.draw_with_max_border_polygon):
@@ -157,7 +171,7 @@ class HeightMapGenerator:
             height = int(max_y - min_y + 1)
 
             # Создаем новое изображение с черным фоном
-            image = Image.new("RGB", (width+1+self.max_distance_to_border_polygon, height+1+self.max_distance_to_border_polygon), "black")
+            image = Image.new("RGB", (width+1+self.max_distance_to_border_polygon*2, height+1+self.max_distance_to_border_polygon*2), "black")
             draw = ImageDraw.Draw(image)
 
             offset_x = -min_x
@@ -182,10 +196,6 @@ class HeightMapGenerator:
 
             image.save("lines_image.png")
             image.show()
-
-
-    from shapely.geometry import Polygon, Point
-    import numpy as np
 
     def direction_point_from_border_polygon(self, border_polygon, point):
         coords = list(border_polygon.exterior.coords)
@@ -223,6 +233,72 @@ class HeightMapGenerator:
 
         return Point(projection_x, projection_y)
 
+    def create_graph_from_polygon(self, polygon, direction='both'):
+        """
+        Создает граф из вершин полигона.
+        Ребра соединяют соседние вершины с учетом направления движения.
+
+        :param direction: Направление движения. Возможные значения:
+                          'both' - двустороннее движение,
+                          'forward' - однонаправленное по часовой стрелке,
+                          'backward' - однонаправленное против часовой стрелки.
+        """
+        G = nx.DiGraph() if direction != 'both' else nx.Graph()  # Выбор типа графа: направленный или нет
+
+        # Добавляем вершины полигона в граф
+        for i in range(len(polygon.exterior.coords)):
+            G.add_node(i, coord=polygon.exterior.coords[i])
+
+        # Добавляем рёбра между соседними вершинами с учётом общего направления
+        for i in range(len(polygon.exterior.coords) - 1):
+            if direction == 'forward' or direction == 'both':
+                G.add_edge(i, i + 1,
+                           weight=LineString([polygon.exterior.coords[i], polygon.exterior.coords[i + 1]]).length)
+            if direction == 'backward' or direction == 'both':
+                G.add_edge(i + 1, i,
+                           weight=LineString([polygon.exterior.coords[i], polygon.exterior.coords[i + 1]]).length)
+
+        # Замыкаем полигон
+        if direction == 'forward' or direction == 'both':
+            G.add_edge(len(polygon.exterior.coords) - 1, 0,
+                       weight=LineString([polygon.exterior.coords[-1], polygon.exterior.coords[0]]).length)
+        if direction == 'backward' or direction == 'both':
+            G.add_edge(0, len(polygon.exterior.coords) - 1,
+                       weight=LineString([polygon.exterior.coords[-1], polygon.exterior.coords[0]]).length)
+
+        return G
+
+    def find_closest_vertex(self, polygon, point):
+        """
+        Находит ближайшую вершину полигона к точке
+        """
+        min_dist = float('inf')
+        closest_vertex = None
+
+        for i, coord in enumerate(polygon.exterior.coords):
+            dist = Point(coord).distance(point)
+            if dist < min_dist:
+                min_dist = dist
+                closest_vertex = i
+
+        return closest_vertex
+
+    def find_path_one_way(self, G, start_vertex, end_vertex):
+        """
+        Поиск пути в графе только в одну сторону, с использованием направленного графа.
+        """
+        try:
+            path = nx.shortest_path(G, start_vertex, end_vertex)
+        except nx.NetworkXNoPath:
+            path = None  # Если пути нет
+        return path
+
+    def get_path_points(self, G, path):
+        """
+        Возвращает список координат точек для заданного пути
+        """
+        return [G.nodes[i]['coord'] for i in path]
+
     def GenerateLinesByLineData(self,lines_data):
         lines_coords = []
         for line_data in lines_data:
@@ -235,24 +311,103 @@ class HeightMapGenerator:
         self.SetupSizeDataFromLines(lines_coords)
         return self.GeneratedLineByCoords(lines_coords)
 
-    def FixLine(self, line):
-        if (line[0] != line[len(line) - 1]):
-            projection_point, closest_segment =self.direction_point_from_border_polygon(self.border_polygon, line[0])
-            x_coordinate_start = projection_point.x
-            y_coordinate_start = projection_point.y
-            line.insert(0,(x_coordinate_start,y_coordinate_start))
+    def MergeNearLines(self, lines):
+        answer_lines = []
+        availible_lines = lines.copy()
+        while len(availible_lines)>1:
+            line = availible_lines[0]
+            if (line[0] == line[len(line) - 1]) and not self.border_polygon.contains(Point(line[0])) and not self.border_polygon.contains(
+                    Point(line[len(line)-1])):
+                answer_lines.append(availible_lines[0])
+                del availible_lines[0]
+            else:
+                optimal_line_const = 10000000
+                optimal_line_to_merge_index = -1
+                optimal_start_point_to_merge_index = -1
+                optimal_end_point_to_merge_index = -1
+                k = 0
+                for test_line in availible_lines:
+                    if (test_line[0] != test_line[len(test_line) - 1]):
+                        if self.border_polygon.contains(Point(test_line[0])) and self.border_polygon.contains(
+                                Point(line[len(line)-1])):
 
-            projection_point, closest_segment = self.direction_point_from_border_polygon(self.border_polygon, line[len(line) - 1])
-            x_coordinate_end = projection_point.x
-            y_coordinate_end = projection_point.y
-            line.append((x_coordinate_end, y_coordinate_end))
+                            test_distance = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
+                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
+                                optimal_line_const = test_distance
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = 0
+                                optimal_end_point_to_merge_index = 0
+
+                            test_distance = (test_line[len(test_line)-1][0] - line[0][0]) ** 2 + (test_line[len(test_line)-1][1] - line[0][1]) ** 2
+                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
+                                optimal_line_const = test_distance
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = 0
+                                optimal_end_point_to_merge_index = len(availible_lines)-1
+
+                            test_distance = (test_line[len(test_line)-1][0] - line[len(line)-1][0]) ** 2 + (test_line[len(test_line)-1][1] - line[len(line)-1][1]) ** 2
+                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
+                                optimal_line_const = test_distance
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = len(line)-1
+                                optimal_end_point_to_merge_index = len(availible_lines)-1
+
+                            test_distance = (test_line[0][0] - line[len(line)-1][0]) ** 2 + (test_line[0][1] - line[len(line)-1][1]) ** 2
+                            if (test_distance < optimal_line_const and test_distance < self.max_merge_line_value):
+                                optimal_line_const = test_distance
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = len(line)-1
+                                optimal_end_point_to_merge_index = 0
+                    k = k + 1
+
+                if(optimal_line_to_merge_index!=-1):
+                    //Дописать код.
+                    line = line + availible_lines[optimal_line_to_merge_index]
+                    del availible_lines[optimal_line_to_merge_index]
+                else:
+                    del availible_lines[0]
+        return answer_lines
+
+    def FixLine(self, line):
+            if (line[0] != line[len(line) - 1]):
+                if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)])):
+                    G = self.create_graph_from_polygon(self.max_border_polygon, self.hight_find_direction)
+
+                    projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line[0])
+                    x_coordinate_start = projection_point.x
+                    y_coordinate_start = projection_point.y
+                    line.insert(0, (x_coordinate_start, y_coordinate_start))
+
+                    start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
+
+                    projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line[len(line) - 1])
+                    x_coordinate_end = projection_point.x
+                    y_coordinate_end = projection_point.y
+                    line.append((x_coordinate_end, y_coordinate_end))
+
+                    end_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_end, y_coordinate_end )))
+
+                    one_way_path = self.find_path_one_way(G, start_vertex, end_vertex)
+                    if one_way_path:
+                        path_points = self.get_path_points(G, one_way_path)
+                        for path_point in path_points:
+                            line.insert(0, (path_point[0], path_point[1]))
+                        line.append(path_points[len(path_points) - 1])
+                    return True
+                else:
+                    exit()
+            return False
+
 
     def GeneratedLineByCoords(self, lines_coords):
         lines = []
+        if (self.apply_merge_line_value):
+            lines_coords = self.MergeNearLines(lines_coords)
         for line in lines_coords:
-            self.FixLineCoords(line)
+            if(self.apply_unborder_draw):
+                self.FixLine(line)
             new_line = line_library.ULine(None, [], None, line)
-            new_line.MergeСlosePoints(self.merge_value)
+            new_line.MergeСlosePoints(self.merge_point_value)
             if(new_line.CheckLineNumberPoint()):
                 new_line.CreatePoligon()
                 lines.append(new_line)
