@@ -1,6 +1,7 @@
 import helper_functions as helper_functions
 from shapely.geometry import Polygon
 import numpy as np
+import random
 
 class ULine:
     def __init__(self, parent, childs, shapely_polygon, line):
@@ -8,6 +9,20 @@ class ULine:
         self.childs = childs
         self.shapely_polygon = shapely_polygon
         self.line = line
+        self.color = []
+        self.GenerateColorByLines()
+
+
+    def GenerateColorByLines(self):
+        s = 0
+        for point in self.line:
+            s = s + point[0]+ point[1]
+        s = abs(s)
+        r = s % 256  # Красный компонент
+        g = (s * 2 + 50) % 256  # Зеленый компонент (с небольшим смещением)
+        b = (s * 3 + 100) % 256  # Синий компонент (с большим смещением)
+
+        self.color = [int(r),int(g),int(b)]
 
     def GetRootLine(this):
         if (this.parent):
@@ -65,15 +80,5 @@ def GetRootLines(lines):
             answer.append(root_line)
     return answer
 
-def PrintLinesFromLine(uline, level=0):
-    indent = "    " * level  # Создаем отступ в зависимости от уровня
-    print(f"{indent}Line: {uline.line}, Polygon: {uline.shapely_polygon}")
 
-    for child in uline.childs:
-        PrintLinesFromLine(child, level + 1)
-
-def PrintLinesFromLines(ulines, level=0):
-    root_lines = GetRootLines(ulines)
-    for line in root_lines:
-        PrintLinesFromLine(line)
 

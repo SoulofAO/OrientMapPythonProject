@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout, QCheckBox,
     QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea
 )
 from PyQt5.QtCore import Qt
@@ -43,6 +43,9 @@ class HeightmapGeneratorUI(QMainWindow):
         self.load_button = QPushButton("Load File")
         self.reset_button = QPushButton("Reset")
         self.apply_button = QPushButton("Apply")
+        self.load_button.clicked.connect(self.on_load_file)
+        self.reset_button.clicked.connect(self.on_reset)
+        self.apply_button.clicked.connect(self.on_apply)
         left_layout.addWidget(self.load_button)
         left_layout.addWidget(self.reset_button)
         left_layout.addWidget(self.apply_button)
@@ -125,7 +128,18 @@ class HeightmapGeneratorUI(QMainWindow):
 
     def on_apply(self):
         # Применить параметры
-        pass
+        for attr_name in dir(self.settings):
+            if not attr_name.startswith('__') and not callable(getattr(self.settings, attr_name)):
+                widget = self.findChild(QWidget, attr_name)
+                if isinstance(widget, QSpinBox):
+                    setattr(self.settings, attr_name, widget.value())
+                elif isinstance(widget, QSlider):
+                    setattr(self.settings, attr_name, widget.value() / 100.0)
+                elif isinstance(widget, QCheckBox):
+                    setattr(self.settings, attr_name, widget.isChecked())
+
+            # Дополнительно, здесь можно добавить код для пересчета карты или отображения результата.
+        print("Параметры обновлены:", vars(self.settings))
 
 
 # Запуск приложения

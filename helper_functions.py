@@ -45,7 +45,7 @@ def ChooseFile():
 
     if file_path:
         print(f"Выбранный файл: {file_path}")
-        return ReadFile(file_path)
+        return file_path, ReadFile(file_path)
     else:
         print("Файл не выбран.")
-        return None;
+        return None, None;
