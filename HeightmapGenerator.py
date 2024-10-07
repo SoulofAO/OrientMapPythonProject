@@ -476,7 +476,7 @@ class UHeightMapGenerator:
             min_parent = None
             for uncheck_line in uncheck_lines:
                 if(check_line.shapely_polygon.contains(uncheck_line.shapely_polygon)):
-                    if(uncheck_line.parent):
+                    if(uncheck_line.parent and check_line.parent):
                         if check_line.parent.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             uncheck_line.parent.childs.remove(check_line)
                             uncheck_line.parent = check_line
@@ -489,7 +489,8 @@ class UHeightMapGenerator:
                         min_parent = uncheck_line
                         min_parent_area = uncheck_line.shapely_polygon.area
             if(min_parent):
-                check_line.parent.childs.remove(check_line)
+                if(check_line.parent and check_line in check_line.parent.childs ):
+                    check_line.parent.childs.remove(check_line)
                 check_line.parent = min_parent
                 check_line.parent.childs.append(check_line)
         return lines

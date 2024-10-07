@@ -15,11 +15,16 @@ from PyQt5.QtGui import QColor
 
 
 class UHeightmapGenerationWarperThread(QThread):
-    progress = pyqtSignal(int)  # Сигнал для передачи прогресса
+    def __init__(self):
+        super().__init__()
+        self.settings = None
 
-    def run(self, heightmap_generator):
-        self.settings: UHeightMapGenerator = heightmap_generator
-        self.settings.LaunchAsync()
+    def set_heightmap_generator(self, heightmap_generator):
+        self.settings = heightmap_generator
+
+    def run(self):
+        if self.settings:
+            self.settings.MainLaunchOperations()
 
 
 class UHeightmapGeneratorUI(QMainWindow):
@@ -47,7 +52,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         left_layout.addWidget(self.draw_debug_lines_checkbox)
 
         self.image_label = QLabel("Image Preview")
-        self.image_label.setFixedSize(400, 400)
+        #self.image_label.setFixedSize(400, 400)
         self.image_label.setStyleSheet("border: 1px solid black;")
         self.image_label.setAlignment(Qt.AlignCenter)
         left_layout.addWidget(self.image_label)
@@ -226,7 +231,8 @@ class UHeightmapGeneratorUI(QMainWindow):
         if(self.settings.bna_file_path and os.path.exists(self.settings.bna_file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
             self.settings.end_cook_delegate.add(self.on_image_cooked)
-            self.thread_warper.run(self.settings)
+            self.thread_warper.set_heightmap_generator(self.settings)
+            self.thread_warper.start()
 
 
     def save_settings_to_file(self, file_name):

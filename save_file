@@ -1,9 +1,9 @@
 {
-    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLineV5.bna",
+    "bna_file_path": "C:/Users/sgsgg/Downloads/RealMapExampleV2.bna",
     "global_scale_multiplier": 0.2,
     "first_level_distance": 10.0,
     "merge_point_value": 0.0,
-    "max_merge_line_value": 200.0,
+    "max_merge_line_value": 50.0,
     "border_distance": 20,
     "max_distance_to_border_polygon": 100,
     "draw_with_max_border_polygon": true,
