@@ -36,6 +36,7 @@ class UHeightMapGenerator:
         self.apply_unborder_draw = True
         self.apply_merge_line_value = True
         self.end_cook_delegate = Delegates.UDelegate()
+        self.cook_image = None
 
         self.save_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance', 'merge_point_value', 'max_merge_line_value',
                         'border_distance', 'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
@@ -179,6 +180,7 @@ class UHeightMapGenerator:
                 border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
             draw.line(border_coords, fill="red", width=2)
             image.save("lines_image.png")
+            self.cook_image = image
             image.show()
         else:
             min_x = min(min(point[0] for point in line.line) for line in lines)
@@ -219,6 +221,7 @@ class UHeightMapGenerator:
                               width=2)  # Рисуем линию с цветом из line.color
 
             image.save("lines_image.png")
+            self.cook_image = image
             return image
 
     def direction_point_from_border_polygon(self, border_polygon, point):
@@ -542,47 +545,32 @@ class UHeightMapGenerator:
                 white_intensity = min(255, int(intensity * 255/max_depth))  # Увеличиваем интенсивность
                 draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))
                 k = k + 1
-
+        self.cook_image = image
         return image
 
-
-    def LaunchNonAsync(self):
-        if(os.path.exists(self.bna_file_path)):
-            data = helper_functions.ReadFile(self.bna_file_path)
-            if(data):
-                if(self.draw_debug_lines):
-                    data_all = self.ParseAllFromData(data)
-                    data_lines = self.ParseLinesFromData(data)
-                    self.lines = self.GenerateLinesByLineData(data_lines)
-                    print(self.width, self.height)
-                    return self.DebugDrawLines(self.lines)
-                else:
-                    data_all = self.ParseAllFromData(data)
-                    data_lines = self.ParseLinesFromData(data)
-                    self.lines = self.GenerateLinesByLineData(data_lines)
-                    print(self.width, self.height)
-                    return self.DrawPlotHeightMap(self.lines)
-
     def LaunchAsync(self):
-
         if(os.path.exists(self.bna_file_path)):
             data = helper_functions.ReadFile(self.bna_file_path)
             if(data):
-                thread = threading.Thread(target=worker, args=(i, duration))
-                threads.append(thread)
-                thread.start()  # Запускаем поток
+                thread = threading.Thread(target=self.MainLaunchOperations)
+                thread.start()
+                thread.join()
 
-    def MainOperations(self):
-        if (self.draw_debug_lines):
-            data_all = self.ParseAllFromData(data)
-            data_lines = self.ParseLinesFromData(data)
-            self.lines = self.GenerateLinesByLineData(data_lines)
-            print(self.width, self.height)
-            self.DebugDrawLines(self.lines)
-        else:
-            data_all = self.ParseAllFromData(data)
-            data_lines = self.ParseLinesFromData(data)
-            self.lines = self.GenerateLinesByLineData(data_lines)
-            print(self.width, self.height)
-            self.DrawPlotHeightMap(self.lines)
+    def MainLaunchOperations(self):
+        if(os.path.exists(self.bna_file_path)):
+            data = helper_functions.ReadFile(self.bna_file_path)
+            if (self.draw_debug_lines):
+                data_all = self.ParseAllFromData(data)
+                data_lines = self.ParseLinesFromData(data)
+                self.lines = self.GenerateLinesByLineData(data_lines)
+                print(self.width, self.height)
+                self.DebugDrawLines(self.lines)
+                self.end_cook_delegate.invoke()
+            else:
+                data_all = self.ParseAllFromData(data)
+                data_lines = self.ParseLinesFromData(data)
+                self.lines = self.GenerateLinesByLineData(data_lines)
+                print(self.width, self.height)
+                self.DrawPlotHeightMap(self.lines)
+                self.end_cook_delegate.invoke()
 

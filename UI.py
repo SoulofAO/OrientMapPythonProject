@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem
 )
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import PIL.ImageQt as ImageQt
 import helper_functions
 import json
@@ -12,6 +12,15 @@ import os
 from HeightmapGenerator import UHeightMapGenerator
 import line
 from PyQt5.QtGui import QColor
+
+
+class UHeightmapGenerationWarperThread(QThread):
+    progress = pyqtSignal(int)  # Сигнал для передачи прогресса
+
+    def run(self, heightmap_generator):
+        self.settings: UHeightMapGenerator = heightmap_generator
+        self.settings.LaunchAsync()
+
 
 class UHeightmapGeneratorUI(QMainWindow):
     def __init__(self, heightmap_generator):
@@ -88,6 +97,8 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.setCentralWidget(central_widget)
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
+
+        self.thread_warper = UHeightmapGenerationWarperThread()
 
     def UpdateLoadedStatusText(self):
         if(self.settings.bna_file_path):
@@ -202,17 +213,20 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.save_settings_to_file("save_file")
         print("Параметры обновлены:", vars(self.settings))
 
+    def on_image_cooked(self):
+        if (self.settings.cook_image):
+            save_path = "output_image.png"  # или другой путь и имя файла
+            self.settings.cook_image.save(save_path)
+            loaded_pixmap = QPixmap(save_path)
+            self.image_label.setPixmap(loaded_pixmap)
+            self.UpdateLines()
+
     def on_apply(self):
         self.ApplyAllVariableAndSave()
         if(self.settings.bna_file_path and os.path.exists(self.settings.bna_file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
-            image = self.settings.Launch()
-            if(image):
-                save_path = "output_image.png"  # или другой путь и имя файла
-                image.save(save_path)
-                loaded_pixmap = QPixmap(save_path)
-                self.image_label.setPixmap(loaded_pixmap)
-                self.UpdateLines()
+            self.settings.end_cook_delegate.add(self.on_image_cooked)
+            self.thread_warper.run(self.settings)
 
 
     def save_settings_to_file(self, file_name):
