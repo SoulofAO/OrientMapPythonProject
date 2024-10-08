@@ -1,37 +1,72 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication,
-    QWidget,
-    QVBoxLayout,
-    QPushButton,
-    QListWidget,
-    QHBoxLayout,
-    QMessageBox,
-    QLineEdit,
-    QLabel,
-    QSpinBox,
-    QScrollArea,
-    QFormLayout,
-    QCheckBox,
-    QDoubleSpinBox
+    QWidget, QVBoxLayout,
+    QLineEdit, QPushButton,
+    QListWidget, QMessageBox
 )
 
-
-class Settings:
-    counter = -1
-
+class UNameHeightmapReciveLayerListWidget(QWidget):
     def __init__(self):
-        Settings.counter = Settings.counter + 1
-        self.name = f"{Settings.counter}"
-        self.value = 0
-        self.use_fix_border_lines = False
-        self.ui_show_tag = ["value", "use_fix_border_lines"]
+        super().__init__()
+        self.init_ui()
 
-    def __str__(self):
-        string = ""
-        for attr_name in self.ui_show_tag:
-            string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
-        return f"{self.name}: {string}"
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # Поле для ввода имени
+        self.name_input = QLineEdit(self)
+        self.name_input.setPlaceholderText("Enter Name")
+        layout.addWidget(self.name_input)
+
+        # Поле для ввода значения
+        self.value_input = QLineEdit(self)
+        self.value_input.setPlaceholderText("Enter Value")
+        layout.addWidget(self.value_input)
+
+        # Кнопка для добавления
+        self.add_button = QPushButton("Add", self)
+        self.add_button.clicked.connect(self.add_item)
+        layout.addWidget(self.add_button)
+
+        # Кнопка для удаления
+        self.delete_button = QPushButton("Delete", self)
+        self.delete_button.clicked.connect(self.delete_item)
+        layout.addWidget(self.delete_button)
+
+        # Список для отображения пар Name/Value
+        self.list_widget = QListWidget(self)
+        layout.addWidget(self.list_widget)
+
+        self.setLayout(layout)
+
+    def add_item(self):
+        name = self.name_input.text().strip()
+        value = self.value_input.text().strip()
+
+        # Проверка на пустые поля
+        if not name or not value:
+            QMessageBox.warning(self, "Warning", "Name and Value cannot be empty!")
+            return
+
+        # Проверка на уникальность имени
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.text().startswith(name + ":"):
+                QMessageBox.warning(self, "Warning", "Name must be unique!")
+                return
+
+        # Добавление новой пары в список
+        self.list_widget.addItem(f"{name}: {value}")
+        self.name_input.clear()
+        self.value_input.clear()
+
+    def delete_item(self):
+        # Удаление выделенного элемента из списка
+        selected_item = self.list_widget.currentItem()
+        if selected_item:
+            self.list_widget.takeItem(self.list_widget.row(selected_item))
+        else:
+            QMessageBox.warning(self, "Warning", "Select an item to delete!")
 
 
 class UArrayWidget(QWidget):
@@ -196,10 +231,3 @@ class UArrayWidget(QWidget):
         layout.addRow(attr_name, checkbox)
 
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main_widget = MainWidget(Settings)
-    main_widget.setWindowTitle('Settings Editor')
-    main_widget.resize(400, 300)
-    main_widget.show()
-    sys.exit(app.exec_())

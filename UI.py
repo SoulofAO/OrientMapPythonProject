@@ -12,7 +12,7 @@ import os
 from HeightmapGenerator import UHeightMapGenerator
 import line
 from PyQt5.QtGui import QColor
-
+import UIModulate
 
 class UHeightmapGenerationWarperThread(QThread):
     def __init__(self):
@@ -89,6 +89,9 @@ class UHeightmapGeneratorUI(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(scroll_content)
 
+        self.params_array = []
+        
+
         # Автоматическое создание элементов интерфейса для параметров
         self.create_param_controls(self.scroll_layout)
 
@@ -134,6 +137,12 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.combobox_directions.addItems(['both', 'forward', 'backward'])
         self.combobox_directions.setItemText(['both', 'forward', 'backward'].index(self.settings.hight_find_direction), self.settings.hight_find_direction)
         layout.addRow("combo_box", self.combobox_directions)
+
+        self.combobox_directions = QComboBox()
+        self.combobox_directions.addItems(['both', 'forward', 'backward'])
+        self.combobox_directions.setItemText(['both', 'forward', 'backward'].index(self.settings.hight_find_direction), self.settings.hight_find_direction)
+        layout.addRow("combo_box", self.combobox_directions)
+
 
     def UpdateLines(self):
         self.tree_lines.clear()

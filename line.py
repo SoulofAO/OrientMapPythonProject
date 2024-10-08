@@ -10,6 +10,8 @@ class ULine:
         self.shapely_polygon = shapely_polygon
         self.line = line
         self.color = []
+        self.correct_line = True;
+        self.power = 1.0
         self.GenerateColorByLines()
 
 
@@ -24,11 +26,29 @@ class ULine:
 
         self.color = [int(r),int(g),int(b)]
 
-    def GetRootLine(this):
-        if (this.parent):
-            return this.parent.GetRootLine()
+    def GetRootLine(self):
+        if (self.parent):
+            return self.parent.GetRootLine()
         else:
-            return this
+            return self
+
+    def CheckLineParentLoop(self, visited_lines=[]):
+        if (self in visited_lines):
+            return True
+        else:
+            if (self.GetRootLine()):
+                visited_lines.append(self)
+                return self.GetRootLine().CheckLineParentLoop(visited_lines)
+            else:
+                return False
+
+    def ContainLineInRootChain(this, check_line):
+        if (check_line ==this):
+            return True
+        elif (this.parent):
+            return this.parent.ContainLineInRootChain(check_line)
+        else:
+            return False
 
     def GetMaxDepth(self, depth = 1):
         if(len(self.childs)>0):
@@ -74,11 +94,17 @@ def GetMaxDepthFromLines(lines):
 
 def GetRootLines(lines):
     answer = []
-    for line in lines:
-        root_line = line.GetRootLine()
-        if not root_line in answer:
-            answer.append(root_line)
+    try:
+        for line in lines:
+            root_line = line.GetRootLine()
+            if not root_line in answer:
+                answer.append(root_line)
+    except RecursionError as e:
+        print("FATAL ERROR: MAX RECURSION")
+        print(e)
     return answer
+
+
 
 
 

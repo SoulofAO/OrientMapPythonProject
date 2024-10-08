@@ -7,26 +7,45 @@ import line as line_library
 from shapely.ops import nearest_points
 import networkx as nx
 import os
-import threading
 import Delegates
+from scipy.spatial import ConvexHull
+
+
+
+class UFixingLinesSettings:
+    counter = -1
+
+    def __init__(self):
+        Settings.counter = Settings.counter + 1
+        self.name = f"{Settings.counter}"
+        self.value = 0
+        self.use_fix_border_lines = False
+        self.ui_show_tag = ["value", "use_fix_border_lines"]
+
+    def __str__(self):
+        string = ""
+        for attr_name in self.ui_show_tag:
+            string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
+        return f"{self.name}: {string}"
 
 class UHeightMapGenerator:
     def __init__(self):
         self.bna_file_path = "None"
         self.global_scale_multiplier = 0.2
-
+        self.width = 0
+        self.height = 0
         self.max_width = -1000000
         self.max_height = -1000000
         self.min_width = 1000000
         self.min_height = 1000000
 
-        self.availible_parce_data = ["Contour","Index contour"]
+        self.availible_parce_data = [["Contour",1],["Index contour",1]]
         self.first_level_distance = 50 * self.global_scale_multiplier
         self.merge_point_value = 0*self.global_scale_multiplier
         self.max_merge_line_value = 1000*self.global_scale_multiplier
 
         self.border_polygon = None
-        self.border_distance = 20;
+        self.border_distance = 0;
         self.max_border_polygon = None
         self.max_distance_to_border_polygon = 100
         self.draw_with_max_border_polygon = True
@@ -106,54 +125,94 @@ class UHeightMapGenerator:
 
         return lines
 
+    def SetupBorderPoligonsDataFromLines(self, lines_coords):
+        """
+        Формирует два полигона (уменьшенный и расширенный) на основе координат линий.
+
+        :param lines_coords: Список отрезков в формате [[[x1, y1], [x2, y2]], ...]
+        """
+        points = []
+        for line in lines_coords:
+            for segment in line:
+                points.append(segment)
+
+        points = np.array(points)
+
+        unique_points = np.unique(points, axis=0)
+
+        if len(unique_points) < 3:
+            # Если точек меньше 3 или они лежат на одной прямой, используем LineString и создаем буфер
+            line = LineString(unique_points)
+            self.border_polygon = line.buffer(-1*self.border_distance, join_style=2,
+                                              cap_style=2)  # cap_style=2 для плоских концов
+            self.max_border_polygon = line.buffer(self.max_distance_to_border_polygon, join_style=2, cap_style=2)
+
+        else:
+            # Находим минимальные и максимальные координаты по x и y
+            self.min_width = np.min(points[:, 0])
+            self.max_width = np.max(points[:, 0])
+            self.min_height = np.min(points[:, 1])
+            self.max_height = np.max(points[:, 1])
+
+            # Создаем выпуклую оболочку на основе всех точек отрезков
+            hull = ConvexHull(points)
+            hull_points = points[hull.vertices]  # Вершины выпуклой оболочки
+            original_polygon = Polygon(hull_points)  # Исходный полигон
+
+            # 1. Создание уменьшенного полигона (border_polygon)
+            self.border_polygon = original_polygon.buffer(-1*self.border_distance, join_style=2)
+
+            # 2. Создание расширенного полигона (max_border_polygon)
+            self.max_border_polygon = original_polygon.buffer(self.max_distance_to_border_polygon, join_style=2)
+
+    def find_bounding_square(self, polygon):
+        """
+        Находит размеры квадрата, в который можно вписать заданный полигон.
+
+        :param polygon: Объект типа Polygon из библиотеки Shapely
+        :return: Координаты квадратного ограничивающего прямоугольника (min_x, min_y, max_x, max_y)
+        """
+        if polygon.is_empty:
+            print("Полигон пуст.")
+            return None
+
+        min_x, min_y, max_x, max_y = polygon.bounds
+
+        width = max_x - min_x
+        height = max_y - min_y
+
+        square_side = max(width, height)
+
+        if height < square_side:
+            diff = square_side - height
+            min_y -= diff / 2
+            max_y += diff / 2
+        elif width < square_side:
+            diff = square_side - width
+            min_x -= diff / 2
+            max_x += diff / 2
+
+        return min_x, min_y, max_x, max_y
 
     def SetupSizeDataFromLines(self, lines_coords):
-        max_width = -1000000
-        max_height = -1000000
-        min_width = 1000000
-        min_height = 1000000
-        for line in lines_coords:
-            for coord in line:
-                if (max_width < coord[0]):
-                    max_width= coord[0]
-                if (max_height < coord[1]):
-                    max_height = coord[1]
-                if (min_width > coord[0]):
-                    min_width = coord[0]
-                if (min_height > coord[1]):
-                    min_height = coord[1]
+        coords = [coord for line in lines_coords for coord in line]
 
-        self.width = max_width - min_width
-        self.height = max_height - min_height
+        self.min_width = min(coord[0] for coord in coords)
+        self.max_width = max(coord[0] for coord in coords)
+        self.min_height = min(coord[1] for coord in coords)
+        self.max_height = max(coord[1] for coord in coords)
 
-        self.max_width = max_width
-        self.max_height = max_height
-        self.min_width = min_width
-        self.min_height = min_height
+        self.width = self.max_width - self.min_width
+        self.height = self.max_height - self.min_height
 
-
-        unfinished_lines = []
-        for line in lines_coords:
-            if(line[0] != line[len(line) - 1]):
-                unfinished_lines.append(line)
-
-        self.border_polygon = Polygon([(self.min_width+self.border_distance, self.min_height+self.border_distance),
-                                       (self.max_width-self.border_distance, self.min_height+self.border_distance),
-                 (self.max_width-self.border_distance, self.max_height-self.border_distance),
-                 (self.min_width+self.border_distance, self.max_height-self.border_distance)])
-        self.max_border_polygon = Polygon([(self.min_width-self.max_distance_to_border_polygon, self.min_height-self.max_distance_to_border_polygon),
-                                           (self.max_width+self.max_distance_to_border_polygon, self.min_height-self.max_distance_to_border_polygon),
-                 (self.max_width+self.max_distance_to_border_polygon, self.max_height+self.max_distance_to_border_polygon),
-                 (self.min_width-self.max_distance_to_border_polygon, self.max_height+self.max_distance_to_border_polygon)])
-
-
+        self.SetupBorderPoligonsDataFromLines(lines_coords)
 
     def DebugDrawLines(self,lines):
         if(not self.draw_with_max_border_polygon):
-            min_x = min(min(point[0] for point in line.line) for line in lines)
-            max_x = max(max(point[0] for point in line.line) for line in lines)
-            min_y = min(min(point[1] for point in line.line) for line in lines)
-            max_y = max(max(point[1] for point in line.line) for line in lines)
+            min_x = self.min_width
+            max_x = self.max_width
+            min_y = self.min_height
+            max_y = self.max_height
 
             # Увеличиваем размеры изображения с учетом отрицательных координат
             width = int(max_x - min_x + 1 )
@@ -183,17 +242,10 @@ class UHeightMapGenerator:
             self.cook_image = image
             image.show()
         else:
-            min_x = min(min(point[0] for point in line.line) for line in lines)
-            max_x = max(max(point[0] for point in line.line) for line in lines)
-            min_y = min(min(point[1] for point in line.line) for line in lines)
-            max_y = max(max(point[1] for point in line.line) for line in lines)
-
-            # Увеличиваем размеры изображения с учетом отрицательных координат
+            min_x, min_y, max_x, max_y  = self.find_bounding_square(self.max_border_polygon)
             width = int(max_x - min_x + 1)
             height = int(max_y - min_y + 1)
-
-            # Создаем новое изображение с черным фоном
-            image = Image.new("RGB", (width+1+self.max_distance_to_border_polygon*2, height+1+self.max_distance_to_border_polygon*2), "black")
+            image = Image.new("RGB", (width+1, height+1), "black")
             draw = ImageDraw.Draw(image)
 
             offset_x = -min_x
@@ -203,22 +255,26 @@ class UHeightMapGenerator:
             border_coords = []
 
             for length in range(len(x)):
-                border_coords.append((int(x[length] + offset_x+self.max_distance_to_border_polygon), int(y[length] + offset_y+self.max_distance_to_border_polygon)))
+                border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
             draw.line(border_coords, fill="red", width=2)
 
             x, y = self.max_border_polygon.exterior.xy
             max_border_coords = []
             for length in range(len(x)):
-                max_border_coords.append((int(x[length] + offset_x + self.max_distance_to_border_polygon), int(y[length] + offset_y+self.max_distance_to_border_polygon)))
+                max_border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
             draw.line(max_border_coords, fill="green", width=2)
 
             for line in lines:
-                if len(line.line) >= 2:  # Проверяем, что есть как минимум две точки для рисования линии
-                    # Преобразуем массив координат в плоский список с учетом смещения и округляем до int
-                    flat_coords = [(int(point[0] + offset_x+self.max_distance_to_border_polygon), int(point[1] + offset_y+self.max_distance_to_border_polygon)) for point in line.line]
-
-                    draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]),
-                              width=2)  # Рисуем линию с цветом из line.color
+                if(line.correct_line):
+                    if len(line.line) >= 2:
+                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.line]
+                        draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]),
+                                  width=2)
+                else:
+                    if len(line.line) >= 2:
+                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.line]
+                        for i in range(len(flat_coords)-1):
+                            self.draw_two_color_line(draw, flat_coords[i], flat_coords[i+1], 'red', 'white', width=2, step=10)
 
             image.save("lines_image.png")
             self.cook_image = image
@@ -259,6 +315,36 @@ class UHeightMapGenerator:
         projection_y = p1.y + t * line_vec[1]
 
         return Point(projection_x, projection_y)
+
+    def draw_two_color_line(self, draw, start, end, color1, color2, width=5, step=10):
+        """
+        Рисует красно-белую линию, чередующуюся по цветам.
+        :param draw: Объект ImageDraw для рисования.
+        :param start: Начальная точка линии (x, y).
+        :param end: Конечная точка линии (x, y).
+        :param color1: Первый цвет (например, 'red').
+        :param color2: Второй цвет (например, 'white').
+        :param width: Толщина линии.
+        :param step: Длина каждого сегмента в пикселях.
+        """
+        x0, y0 = start
+        x1, y1 = end
+        dx = x1 - x0
+        dy = y1 - y0
+        length = ((dx ** 2) + (dy ** 2)) ** 0.5  # Длина линии
+        steps = int(length / step)  # Количество шагов (сегментов)
+
+        # Рисуем сегменты, чередуя цвета
+        for i in range(steps):
+            # Вычисляем начальные и конечные координаты для каждого сегмента
+            xi = x0 + (dx / steps) * i
+            yi = y0 + (dy / steps) * i
+            xi_next = x0 + (dx / steps) * (i + 1)
+            yi_next = y0 + (dy / steps) * (i + 1)
+
+            # Чередуем цвета
+            color = color1 if i % 2 == 0 else color2
+            draw.line([(xi, yi), (xi_next, yi_next)], fill=color, width=width)
 
     def create_graph_from_polygon(self, polygon, direction='both'):
         """
@@ -346,8 +432,8 @@ class UHeightMapGenerator:
             line = availible_lines[0]
 
             # Если линия замкнута (первая точка равна последней) и она не внутри полигона
-            if (line[0] == line[len(line) - 1]) and not self.border_polygon.contains(
-                    Point(line[0])) and not self.border_polygon.contains(Point(line[len(line) - 1])):
+            if (line[0] == line[len(line) - 1]) and (not self.border_polygon.contains(
+                    Point(line[0])) or not self.border_polygon.contains(Point(line[len(line) - 1]))):
                 answer_lines.append(availible_lines[0])
                 del availible_lines[0]
             else:
@@ -370,26 +456,45 @@ class UHeightMapGenerator:
                         k = k + 1
                         continue
 
-                    if test_line[0] != test_line[len(test_line) - 1]:  # Проверка, что линия не замкнута
-
-                        # Проверка возможных точек для слияния
-                        test_distances = [
-                            ((test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2, 0, 0),
-                            ((test_line[len(test_line) - 1][0] - line[0][0]) ** 2 + (
-                                        test_line[len(test_line) - 1][1] - line[0][1]) ** 2, 0, len(test_line) - 1),
-                            ((test_line[len(test_line) - 1][0] - line[len(line) - 1][0]) ** 2 + (
-                                        test_line[len(test_line) - 1][1] - line[len(line) - 1][1]) ** 2, len(line) - 1,
-                             len(test_line) - 1),
-                            ((test_line[0][0] - line[len(line) - 1][0]) ** 2 + (
-                                        test_line[0][1] - line[len(line) - 1][1]) ** 2, len(line) - 1, 0)
-                        ]
-
-                        for test_distance, start_idx, end_idx in test_distances:
-                            if test_distance < optimal_line_const and test_distance < self.max_merge_line_value:
-                                optimal_line_const = test_distance
+                    if test_line[0] != test_line[len(test_line) - 1]:
+                        # Проверка первой пары точек: первая точка обеих линий
+                        if(self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(Point(test_line[0]))):
+                            test_distance_1 = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
+                            if test_distance_1 < optimal_line_const and test_distance_1 < self.max_merge_line_value:
+                                optimal_line_const = test_distance_1
                                 optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = start_idx
-                                optimal_end_point_to_merge_index = end_idx
+                                optimal_start_point_to_merge_index = 0
+                                optimal_end_point_to_merge_index = 0
+
+                        # Проверка второй пары точек: первая точка первой линии и последняя точка второй линии
+                        if (self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(
+                                Point(test_line[-1]))):
+                            test_distance_2 = (test_line[-1][0] - line[0][0]) ** 2 + (test_line[-1][1] - line[0][1]) ** 2
+                            if test_distance_2 < optimal_line_const and test_distance_2 < self.max_merge_line_value:
+                                optimal_line_const = test_distance_2
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = 0
+                                optimal_end_point_to_merge_index = len(test_line) - 1
+
+                        # Проверка третьей пары точек: последние точки обеих линий
+                        if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
+                                Point(test_line[-1]))):
+                            test_distance_3 = (test_line[-1][0] - line[-1][0]) ** 2 + (test_line[-1][1] - line[-1][1]) ** 2
+                            if test_distance_3 < optimal_line_const and test_distance_3 < self.max_merge_line_value:
+                                optimal_line_const = test_distance_3
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = len(line) - 1
+                                optimal_end_point_to_merge_index = len(test_line) - 1
+
+                        if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
+                                Point(test_line[0]))):
+                            # Проверка четвертой пары точек: последняя точка первой линии и первая точка второй линии
+                            test_distance_4 = (test_line[0][0] - line[-1][0]) ** 2 + (test_line[0][1] - line[-1][1]) ** 2
+                            if test_distance_4 < optimal_line_const and test_distance_4 < self.max_merge_line_value:
+                                optimal_line_const = test_distance_4
+                                optimal_line_to_merge_index = k
+                                optimal_start_point_to_merge_index = len(line) - 1
+                                optimal_end_point_to_merge_index = 0
                     k += 1
 
                 # Если нашлась линия для объединения или линия замыкает сама себя
@@ -453,7 +558,8 @@ class UHeightMapGenerator:
                     return True
                 else:
                     print("Fatal Error - Border non closest line" + str(line))
-            return False
+                    return False
+            return True
 
 
     def GeneratedLineByCoords(self, lines_coords):
@@ -461,13 +567,20 @@ class UHeightMapGenerator:
         if (self.apply_merge_line_value):
             lines_coords = self.MergeNearLines(lines_coords)
         for line in lines_coords:
+            b_sucsess = True
             if(self.apply_unborder_draw):
-                self.FixLine(line)
+                b_sucsess = self.FixLine(line)
             new_line = line_library.ULine(None, [], None, line)
+            new_line.correct_line = b_sucsess
             new_line.MergeСlosePoints(self.merge_point_value)
-            if(new_line.CheckLineNumberPoint()):
+            if (new_line.CheckLineNumberPoint()):
                 new_line.CreatePoligon()
                 lines.append(new_line)
+
+        """ Сама идея очень проста - мы перебираем все элементы последовательно, удаляя пройденный элемент.
+         Поскольку проейденые элементы больше не прокручиваются, кода настолько много - выбирается как себе parent, так и предположительные Child. 
+         Проверки работают на случай косяка предыдуших этапов.
+        """
         uncheck_lines = lines.copy()
         while len(uncheck_lines)>0:
             check_line = uncheck_lines[0]
@@ -478,9 +591,14 @@ class UHeightMapGenerator:
                 if(check_line.shapely_polygon.contains(uncheck_line.shapely_polygon)):
                     if(uncheck_line.parent and check_line.parent):
                         if check_line.parent.shapely_polygon.area > uncheck_line.shapely_polygon.area:
-                            uncheck_line.parent.childs.remove(check_line)
+                            last_parent = uncheck_line.parent
                             uncheck_line.parent = check_line
-                            check_line.childs.append(uncheck_line)
+                            if(uncheck_line.CheckLineParentLoop()):
+                                uncheck_line.parent = last_parent
+                            else:
+                                if (uncheck_line.parent and check_line in uncheck_line.parent.childs):
+                                    uncheck_line.parent.childs.remove(check_line)
+                                check_line.childs.append(uncheck_line)
                     else:
                         uncheck_line.parent = check_line
                         check_line.childs.append(uncheck_line)
@@ -489,10 +607,14 @@ class UHeightMapGenerator:
                         min_parent = uncheck_line
                         min_parent_area = uncheck_line.shapely_polygon.area
             if(min_parent):
-                if(check_line.parent and check_line in check_line.parent.childs ):
-                    check_line.parent.childs.remove(check_line)
+                last_parent = check_line.parent
                 check_line.parent = min_parent
-                check_line.parent.childs.append(check_line)
+                if(check_line.CheckLineParentLoop()):
+                    check_line.parent = last_parent
+                else:
+                    if(check_line.parent and check_line in check_line.parent.childs):
+                        check_line.parent.childs.remove(check_line)
+                    check_line.parent.childs.append(check_line)
         return lines
 
     def DrawPlotHeightMap(self, lines):
