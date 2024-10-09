@@ -2,16 +2,20 @@ import sys
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout,
     QLineEdit, QPushButton,
-    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem
+    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem, QComboBox
 )
 
 class UArrayWidget(QWidget):
-    def __init__(self, settings_class):
+    def __init__(self, settings_class, settings_list, font_size = 12.0):
         super().__init__()
         self.settings_class = settings_class
         self.param_widgets = []
-        self.settings_list = []
+        self.settings_list = settings_list
+        self.font_size = font_size
         self.initUI()
+
+        for setting in settings_list:
+            self.create_new_setting(setting)
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -66,12 +70,16 @@ class UArrayWidget(QWidget):
                 value = getattr(settings, attr_name)
                 if isinstance(value, bool):
                     self.create_checkbox(layout, attr_name, value)
+                elif (isinstance(value, str) and hasattr(settings, str(attr_name+"_options"))):
+                    options = getattr(settings, str(attr_name+"_options"))
+                    self.create_options(layout,attr_name,value, options)
                 elif isinstance(value, int):
                     self.create_spinbox(layout, attr_name, value)
                 elif isinstance(value, float):
                     self.create_double_spinbox(layout, attr_name, value)
                 elif isinstance(value, str):  # Для строковых параметров
                     self.create_lineedit(layout, attr_name, value)
+
 
     def find_settings_by_name(self, attr_name):
         for param_widget in self.param_widgets:
@@ -87,10 +95,14 @@ class UArrayWidget(QWidget):
             if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
                 value = getattr(settings, attr_name)
                 find_setting = self.find_settings_by_name(attr_name)
-
                 if find_setting:
                     if isinstance(value, bool):
                         find_setting.setChecked(value)
+                    elif (isinstance(value, str) and hasattr(settings, str(attr_name + "_options"))):
+                        options = getattr(settings, str(attr_name + "_options"))
+                        find_setting.setCurrentIndex(options.index(value))
+                        find_setting.clear()
+                        find_setting.addItems(options)
                     elif isinstance(value, int):
                         find_setting.setValue(value)
                     elif isinstance(value, float):
@@ -98,13 +110,8 @@ class UArrayWidget(QWidget):
                     elif isinstance(value, str):  # Для строковых параметров
                         find_setting.setText(value)
 
-    def add_setting(self):
-        # Создаем новый объект настройки
-        new_setting = self.settings_class()
 
-        # Добавляем настройку в список
-        self.settings_list.append(new_setting)
-
+    def create_new_setting(self, new_setting):
         # Создаем кастомный виджет для отображения в ListWidget
         item_widget = QWidget()
         item_layout = QVBoxLayout()
@@ -113,7 +120,7 @@ class UArrayWidget(QWidget):
 
         name_label.setWordWrap(True)
 
-        name_label.setStyleSheet("font-size: 14px;")
+        name_label.setStyleSheet(f"font-size: {self.font_size}px;")
 
         item_layout.addWidget(name_label)
         item_widget.setLayout(item_layout)
@@ -122,9 +129,17 @@ class UArrayWidget(QWidget):
         list_item.setSizeHint(item_widget.sizeHint())
         self.list_widget.setItemWidget(list_item, item_widget)
 
+    def add_setting(self):
+        # Создаем новый объект настройки
+        new_setting = self.settings_class()
+        self.create_new_setting(new_setting)
+
+        # Добавляем настройку в список
+        self.settings_list.append(new_setting)
         self.edit_setting(new_setting)
 
         self.clear_inputs()
+
 
     def update_settings(self, settings=None):
         # Если settings не переданы, используем текущий выбранный элемент
@@ -151,7 +166,7 @@ class UArrayWidget(QWidget):
                 # Обновляем виджет новыми значениями
                 new_name_label = QLabel(f"{settings}")  # Пример обновления строки
                 new_name_label.setWordWrap(True)
-                new_name_label.setStyleSheet("font-size: 14px;")
+                new_name_label.setStyleSheet(f"font-size: {self.font_size}px;")
 
                 # Добавляем обновленный QLabel в layout виджета
                 item_widget.layout().addWidget(new_name_label)
@@ -178,6 +193,8 @@ class UArrayWidget(QWidget):
                     setattr(settings, attr_name, widget.isChecked())
                 elif isinstance(widget, QLineEdit):  # Для строковых параметров
                     setattr(settings, attr_name, widget.text())
+                elif isinstance(widget, QComboBox):
+                    setattr(settings, attr_name, widget.currentText())
 
         self.update_settings(settings)
 
@@ -226,6 +243,16 @@ class UArrayWidget(QWidget):
         line_edit.setText(value)  # Устанавливаем начальное значение
         self.param_widgets.append([attr_name, line_edit])
         layout.addRow(attr_name, line_edit)
+
+    def create_options(self, layout, attr_name, value, options):
+        """Создание ввода числа для вещественных параметров."""
+        combobox_directions = QComboBox()
+        combobox_directions.addItems(options)
+        if value in options:
+            combobox_directions.setCurrentIndex(options.index(value))
+        self.param_widgets.append([attr_name, combobox_directions])
+        layout.addRow(attr_name, combobox_directions)
+
 
 
 

@@ -12,8 +12,9 @@ from scipy.spatial import ConvexHull
 
 
 class UAvailibleParceLineSettings:
-    def __init__(self, name = "string", index = 1):
+    def __init__(self, name = "string", index = 1, options = ["Contour","Index contour"]):
         self.name = name
+        self.name_options = options
         self.index = index
 
         self.ui_show_tag = ["name", "index"]
@@ -47,11 +48,12 @@ class UFixingLinesSettings:
 
         self.border_distance = 0;
         self.hight_find_direction = "both"
+        self.hight_find_direction_options = ['both', 'forward', 'backward']
 
         self.apply_fix_unborder_lines = True
         self.apply_merge_line_value = True
 
-        self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+        self.ui_save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value"]
         self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value"]
@@ -95,6 +97,7 @@ class UHeightMapGenerator:
 
         # 4. Параметры обработки линий
         self.availible_parce_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
+
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
 

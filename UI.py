@@ -97,7 +97,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         right_layout.addWidget(availible_parce_lines_text_label)
         availible_parce_lines_text_label.setAlignment(Qt.AlignCenter)
 
-        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings)
+        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_settings)
         right_layout.addWidget(self.availible_parce_lines_array)
 
         right_layout.addWidget(scroll_area)
@@ -107,14 +107,12 @@ class UHeightmapGeneratorUI(QMainWindow):
         fixing_line_text_lable = QLabel("Fixing Line")
         right_layout.addWidget(fixing_line_text_lable)
         fixing_line_text_lable.setAlignment(Qt.AlignCenter)
-        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings)
+        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings, [])
 
         right_layout.addWidget(self.fix_line_settings_array)
 
-        # Добавляем правый блок в основной layout
         main_layout.addLayout(right_layout)
 
-        # Устанавливаем основной виджет
         self.setCentralWidget(central_widget)
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
@@ -135,21 +133,19 @@ class UHeightmapGeneratorUI(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
         self.param_widgets = []
-        if(self.combobox_directions):
-            self.combobox_directions.deleteLater()
         for attr_name in self.settings.ui_show_tag:
-            if not attr_name.startswith('__') and not callable(getattr(self.settings, attr_name)):
-                value = getattr(self.settings, attr_name)
-                if isinstance(value, bool):
-                    self.create_checkbox(layout, attr_name, value)
-                elif isinstance(value, int):
-                    self.create_spinbox(layout, attr_name, value)
-                elif isinstance(value, float):
-                    self.create_double_spinbox(layout, attr_name, value)
-        self.combobox_directions = QComboBox()
-        self.combobox_directions.addItems(['both', 'forward', 'backward'])
-        self.combobox_directions.setItemText(['both', 'forward', 'backward'].index(self.settings.hight_find_direction), self.settings.hight_find_direction)
-        layout.addRow("combo_box", self.combobox_directions)
+            value = getattr(self.settings, attr_name)
+            if isinstance(value, bool):
+                self.create_checkbox(layout, attr_name, value)
+            elif (isinstance(value, str) and hasattr(self.settings, str(attr_name + "_options"))):
+                options = getattr(self.settings, str(attr_name + "_options"))
+                self.create_options(layout, attr_name, value, options)
+            elif isinstance(value, int):
+                self.create_spinbox(layout, attr_name, value)
+            elif isinstance(value, float):
+                self.create_double_spinbox(layout, attr_name, value)
+
+
 
 
     def UpdateLines(self):
@@ -196,6 +192,14 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.param_widgets.append([attr_name, checkbox])
         layout.addRow(attr_name, checkbox)
 
+    def create_options(self, layout, attr_name, value, options):
+        """Создание ввода числа для вещественных параметров."""
+        combobox_directions = QComboBox()
+        combobox_directions.addItems(options)
+        combobox_directions.setItemText(options.index(value))
+        self.param_widgets.append([attr_name, combobox_directions])
+        layout.addRow(attr_name, combobox_directions)
+
     def FindParamWidgetByName(self, attr_name):
         for param_widget in self.param_widgets:
             if param_widget[0] == attr_name:
@@ -229,7 +233,8 @@ class UHeightmapGeneratorUI(QMainWindow):
                     setattr(self.settings, attr_name, widget.value())
                 elif isinstance(widget, QCheckBox):
                     setattr(self.settings, attr_name, widget.isChecked())
-        self.settings.hight_find_direction = self.combobox_directions.currentText()
+                elif isinstance(widget, QComboBox):
+                    setattr(self.settings, attr_name, widget.currentText())
         print(self.settings.max_distance_to_border_polygon)
         self.UpdateLoadedStatusText()
         self.save_settings_to_file("save_file")
