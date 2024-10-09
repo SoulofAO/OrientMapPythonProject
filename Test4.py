@@ -195,11 +195,3 @@ class UArrayWidget(QWidget):
         self.param_widgets.append([attr_name, checkbox])
         layout.addRow(attr_name, checkbox)
 
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main_widget = MainWidget(Settings)
-    main_widget.setWindowTitle('Settings Editor')
-    main_widget.resize(400, 300)
-    main_widget.show()
-    sys.exit(app.exec_())

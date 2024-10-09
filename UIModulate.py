@@ -2,72 +2,8 @@ import sys
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout,
     QLineEdit, QPushButton,
-    QListWidget, QMessageBox
+    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem
 )
-
-class UNameHeightmapReciveLayerListWidget(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-
-        # Поле для ввода имени
-        self.name_input = QLineEdit(self)
-        self.name_input.setPlaceholderText("Enter Name")
-        layout.addWidget(self.name_input)
-
-        # Поле для ввода значения
-        self.value_input = QLineEdit(self)
-        self.value_input.setPlaceholderText("Enter Value")
-        layout.addWidget(self.value_input)
-
-        # Кнопка для добавления
-        self.add_button = QPushButton("Add", self)
-        self.add_button.clicked.connect(self.add_item)
-        layout.addWidget(self.add_button)
-
-        # Кнопка для удаления
-        self.delete_button = QPushButton("Delete", self)
-        self.delete_button.clicked.connect(self.delete_item)
-        layout.addWidget(self.delete_button)
-
-        # Список для отображения пар Name/Value
-        self.list_widget = QListWidget(self)
-        layout.addWidget(self.list_widget)
-
-        self.setLayout(layout)
-
-    def add_item(self):
-        name = self.name_input.text().strip()
-        value = self.value_input.text().strip()
-
-        # Проверка на пустые поля
-        if not name or not value:
-            QMessageBox.warning(self, "Warning", "Name and Value cannot be empty!")
-            return
-
-        # Проверка на уникальность имени
-        for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            if item.text().startswith(name + ":"):
-                QMessageBox.warning(self, "Warning", "Name must be unique!")
-                return
-
-        # Добавление новой пары в список
-        self.list_widget.addItem(f"{name}: {value}")
-        self.name_input.clear()
-        self.value_input.clear()
-
-    def delete_item(self):
-        # Удаление выделенного элемента из списка
-        selected_item = self.list_widget.currentItem()
-        if selected_item:
-            self.list_widget.takeItem(self.list_widget.row(selected_item))
-        else:
-            QMessageBox.warning(self, "Warning", "Select an item to delete!")
-
 
 class UArrayWidget(QWidget):
     def __init__(self, settings_class):
@@ -116,12 +52,15 @@ class UArrayWidget(QWidget):
 
     def generate_settings(self, layout):
         settings = self.settings_class()
+
+        # Очистка текущих виджетов
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
 
+        # Генерация виджетов на основе параметров
         for attr_name in settings.ui_show_tag:
             if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
                 value = getattr(settings, attr_name)
@@ -131,6 +70,8 @@ class UArrayWidget(QWidget):
                     self.create_spinbox(layout, attr_name, value)
                 elif isinstance(value, float):
                     self.create_double_spinbox(layout, attr_name, value)
+                elif isinstance(value, str):  # Для строковых параметров
+                    self.create_lineedit(layout, attr_name, value)
 
     def find_settings_by_name(self, attr_name):
         for param_widget in self.param_widgets:
@@ -138,57 +79,106 @@ class UArrayWidget(QWidget):
                 return param_widget[1]
         return None
 
-    def load_settings(self, current_row = -1):
+    def load_settings(self, current_row=-1):
         current_row = self.list_widget.currentRow()
         settings = self.settings_list[current_row]
+
         for attr_name in settings.ui_show_tag:
             if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
                 value = getattr(settings, attr_name)
                 find_setting = self.find_settings_by_name(attr_name)
-                print(find_setting, value)
-                if (find_setting):
+
+                if find_setting:
                     if isinstance(value, bool):
                         find_setting.setChecked(value)
                     elif isinstance(value, int):
                         find_setting.setValue(value)
-                        print(value)
                     elif isinstance(value, float):
                         find_setting.setValue(value)
+                    elif isinstance(value, str):  # Для строковых параметров
+                        find_setting.setText(value)
 
     def add_setting(self):
+        # Создаем новый объект настройки
         new_setting = self.settings_class()
+
+        # Добавляем настройку в список
         self.settings_list.append(new_setting)
-        self.list_widget.addItem(str(new_setting))
+
+        # Создаем кастомный виджет для отображения в ListWidget
+        item_widget = QWidget()
+        item_layout = QVBoxLayout()
+
+        name_label = QLabel(f"{new_setting}")  # Пример отображения одного из значений
+
+        name_label.setWordWrap(True)
+
+        name_label.setStyleSheet("font-size: 14px;")
+
+        item_layout.addWidget(name_label)
+        item_widget.setLayout(item_layout)
+
+        list_item = QListWidgetItem(self.list_widget)
+        list_item.setSizeHint(item_widget.sizeHint())
+        self.list_widget.setItemWidget(list_item, item_widget)
+
         self.edit_setting(new_setting)
+
         self.clear_inputs()
 
-    def update_settings(self, settings = None):
+    def update_settings(self, settings=None):
+        # Если settings не переданы, используем текущий выбранный элемент
         if settings is None:
             current_row = self.list_widget.currentRow()
             if current_row < 0:
                 return
             settings = self.settings_list[current_row]
+
         index = self.settings_list.index(settings)
         list_item = self.list_widget.item(index)
+
         if list_item:
-            list_item.setText(str(settings))
+            # Получаем текущий виджет, связанный с элементом
+            item_widget = self.list_widget.itemWidget(list_item)
+
+            if item_widget:
+                # Очищаем текущий layout виджета
+                for i in reversed(range(item_widget.layout().count())):
+                    widget_to_remove = item_widget.layout().itemAt(i).widget()
+                    if widget_to_remove:
+                        widget_to_remove.deleteLater()
+
+                # Обновляем виджет новыми значениями
+                new_name_label = QLabel(f"{settings}")  # Пример обновления строки
+                new_name_label.setWordWrap(True)
+                new_name_label.setStyleSheet("font-size: 14px;")
+
+                # Добавляем обновленный QLabel в layout виджета
+                item_widget.layout().addWidget(new_name_label)
+
+                # Обновляем размер элемента
+                list_item.setSizeHint(item_widget.sizeHint())
 
     def bind_edit_settings(self):
         self.edit_setting()
 
-    def edit_setting(self, settings = None):
-        if(settings==None):
+    def edit_setting(self, settings=None):
+        if settings is None:
             current_row = self.list_widget.currentRow()
             settings = self.settings_list[current_row]
+
         for attr_name in settings.ui_show_tag:
             widget = self.find_settings_by_name(attr_name)
-            if(widget):
+            if widget:
                 if isinstance(widget, QSpinBox):
                     setattr(settings, attr_name, widget.value())
-                elif isinstance(widget, QDoubleSpinBox):  # Заменяем QSlider на QDoubleSpinBox
+                elif isinstance(widget, QDoubleSpinBox):
                     setattr(settings, attr_name, widget.value())
                 elif isinstance(widget, QCheckBox):
                     setattr(settings, attr_name, widget.isChecked())
+                elif isinstance(widget, QLineEdit):  # Для строковых параметров
+                    setattr(settings, attr_name, widget.text())
+
         self.update_settings(settings)
 
     def delete_setting(self):
@@ -229,5 +219,13 @@ class UArrayWidget(QWidget):
         checkbox.setChecked(value)
         self.param_widgets.append([attr_name, checkbox])
         layout.addRow(attr_name, checkbox)
+
+    def create_lineedit(self, layout, attr_name, value):
+        """Создание текстового поля для строковых параметров."""
+        line_edit = QLineEdit()
+        line_edit.setText(value)  # Устанавливаем начальное значение
+        self.param_widgets.append([attr_name, line_edit])
+        layout.addRow(attr_name, line_edit)
+
 
 

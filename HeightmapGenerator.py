@@ -11,16 +11,13 @@ import Delegates
 from scipy.spatial import ConvexHull
 
 
+class UAvailibleParceLineSettings:
+    def __init__(self, name = "string", index = 1):
+        self.name = name
+        self.index = index
 
-class UFixingLinesSettings:
-    counter = -1
-
-    def __init__(self):
-        Settings.counter = Settings.counter + 1
-        self.name = f"{Settings.counter}"
-        self.value = 0
-        self.use_fix_border_lines = False
-        self.ui_show_tag = ["value", "use_fix_border_lines"]
+        self.ui_show_tag = ["name", "index"]
+        self.ui_show_tag = ["name", "index"]
 
     def __str__(self):
         string = ""
@@ -28,44 +25,8 @@ class UFixingLinesSettings:
             string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
         return f"{self.name}: {string}"
 
-class UHeightMapGenerator:
-    def __init__(self):
-        self.bna_file_path = "None"
-        self.global_scale_multiplier = 0.2
-        self.width = 0
-        self.height = 0
-        self.max_width = -1000000
-        self.max_height = -1000000
-        self.min_width = 1000000
-        self.min_height = 1000000
-
-        self.availible_parce_data = [["Contour",1],["Index contour",1]]
-        self.first_level_distance = 50 * self.global_scale_multiplier
-        self.merge_point_value = 0*self.global_scale_multiplier
-        self.max_merge_line_value = 1000*self.global_scale_multiplier
-
-        self.border_polygon = None
-        self.border_distance = 0;
-        self.max_border_polygon = None
-        self.max_distance_to_border_polygon = 100
-        self.draw_with_max_border_polygon = True
-        self.hight_find_direction = "both"
-        self.draw_debug_lines = True;
-
-        self.apply_unborder_draw = True
-        self.apply_merge_line_value = True
-        self.end_cook_delegate = Delegates.UDelegate()
-        self.cook_image = None
-
-        self.save_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance', 'merge_point_value', 'max_merge_line_value',
-                        'border_distance', 'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'hight_find_direction', 'apply_unborder_draw', 'apply_merge_line_value']
-        self.ui_show_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance', 'merge_point_value', 'max_merge_line_value',
-                          'border_distance', 'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                           'hight_find_direction', 'apply_unborder_draw', 'apply_merge_line_value']
-        self.lines = []
     def to_dict(self):
-        """Сериализуем только параметры, указанные в _save_tag."""
+        """Сериализуем только параметры, указанные в save_tag."""
         return {k: getattr(self, k) for k in self.save_tag}
 
     def from_dict(self, data):
@@ -73,6 +34,106 @@ class UHeightMapGenerator:
         for k, v in data.items():
             if k in self.save_tag:
                 setattr(self, k, v)
+
+class UFixingLinesSettings:
+    counter = -1
+
+    def __init__(self):
+        UFixingLinesSettings.counter = UFixingLinesSettings.counter + 1
+        self.name = f"{UFixingLinesSettings.counter}"
+
+        self.merge_point_value = 0;
+        self.max_merge_line_value = 200;
+
+        self.border_distance = 0;
+        self.hight_find_direction = "both"
+
+        self.apply_fix_unborder_lines = True
+        self.apply_merge_line_value = True
+
+        self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+                            "apply_fix_unborder_lines", "apply_merge_line_value"]
+        self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+                            "apply_fix_unborder_lines", "apply_merge_line_value"]
+
+    def __str__(self):
+        string = ""
+        for attr_name in self.ui_show_tag:
+            string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
+        return f"{self.name}: {string}"
+
+    def to_dict(self):
+        """Сериализуем только параметры, указанные в save_tag."""
+        return {k: getattr(self, k) for k in self.save_tag}
+
+    def from_dict(self, data):
+        """Десериализация параметров из словаря в объект."""
+        for k, v in data.items():
+            if k in self.save_tag:
+                setattr(self, k, v)
+
+class UHeightMapGenerator:
+    def __init__(self):
+        # 1. Параметры ввода/вывода
+        self.bna_file_path = "None"  # Путь к файлу BNA
+
+        # 2. Параметры размера и границ
+        self.global_scale_multiplier = 0.2  # Глобальный масштаб
+        self.width = 0  # Ширина карты
+        self.height = 0  # Высота карты
+        self.max_width = -1000000  # Максимальная ширина
+        self.max_height = -1000000  # Максимальная высота
+        self.min_width = 1000000  # Минимальная ширина
+        self.min_height = 1000000  # Минимальная высота
+
+        self.max_distance_to_border_polygon = 100  # Максимальное расстояние до границы полигона
+
+        # 3. Параметры визуализации и отладки
+        self.draw_with_max_border_polygon = True  # Рисовать с максимальной границей полигона
+        self.draw_debug_lines = True  # Режим отладки: отображение отладочных линий
+        self.cook_image = None  # Изображение для отладки или вывода
+
+        # 4. Параметры обработки линий
+        self.availible_parce_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
+        self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
+        self.remove_all_error_lines = False  # Удаление всех ошибочных линий
+
+        self.fixing_lines_settings = []  # Настройки для исправления линий
+        self.lines = []  # Линии, которые будут обрабатываться
+
+        # 5. Прочие настройки и делегаты
+        self.border_polygon = None  # Полигон границы
+        self.max_border_polygon = None  # Максимальный полигон границы
+        self.end_cook_delegate = Delegates.UDelegate()  # Делегат для завершея
+
+        self.save_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
+                         'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
+                         'remove_all_error_lines']
+        self.ui_show_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
+                            'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
+                            'remove_all_error_lines']
+
+
+    def to_dict(self):
+        """Сериализуем только параметры, указанные в save_tag, включая список fixing_lines_settings и availible_parce_settings."""
+        data = {k: getattr(self, k) for k in self.save_tag}
+        # Сериализация списка fixing_lines_settings
+        data['fixing_lines_settings'] = [settings.to_dict() for settings in self.fixing_lines_settings]
+        data['availible_parce_settings'] = [settings.to_dict() for settings in self.availible_parce_settings]
+        return data
+
+    def from_dict(self, data):
+        """Десериализация параметров из словаря в объект."""
+        for k, v in data.items():
+            if k in self.save_tag:
+                setattr(self, k, v)
+            elif k == "fixing_lines_settings":
+                # Десериализация списка fixing_lines_settings
+                self.fixing_lines_settings = [UFixingLinesSettings().from_dict(item) for item in v]
+            elif k == 'availible_parce_settings':
+                # Десериализация списка availible_parce_settings
+                self.availible_parce_settings = [UAvailibleParceLineSettings().from_dict(item) for item in v]
+
 
     def ParseAllFromData(self, data):
         lines = []
@@ -125,7 +186,7 @@ class UHeightMapGenerator:
 
         return lines
 
-    def SetupBorderPoligonsDataFromLines(self, lines_coords):
+    def SetupBorderPoligonsDataFromLines(self, lines_coords, border_distance):
         """
         Формирует два полигона (уменьшенный и расширенный) на основе координат линий.
 
@@ -160,7 +221,7 @@ class UHeightMapGenerator:
             original_polygon = Polygon(hull_points)  # Исходный полигон
 
             # 1. Создание уменьшенного полигона (border_polygon)
-            self.border_polygon = original_polygon.buffer(-1*self.border_distance, join_style=2)
+            self.border_polygon = original_polygon.buffer(border_distance, join_style=2)
 
             # 2. Создание расширенного полигона (max_border_polygon)
             self.max_border_polygon = original_polygon.buffer(self.max_distance_to_border_polygon, join_style=2)
@@ -204,8 +265,6 @@ class UHeightMapGenerator:
 
         self.width = self.max_width - self.min_width
         self.height = self.max_height - self.min_height
-
-        self.SetupBorderPoligonsDataFromLines(lines_coords)
 
     def DebugDrawLines(self,lines):
         if(not self.draw_with_max_border_polygon):
@@ -424,176 +483,166 @@ class UHeightMapGenerator:
         self.SetupSizeDataFromLines(lines_coords)
         return self.GeneratedLineByCoords(lines_coords)
 
-    def MergeNearLines(self, lines):
-        answer_lines = []
-        availible_lines = lines.copy()
+    def FixMergeNearLines(self, setting:UFixingLinesSettings):
+        if(setting.apply_merge_line_value):
+            answer_lines = []
+            availible_lines = self.lines.copy()
 
-        while len(availible_lines) >= 1:
-            line = availible_lines[0]
+            while len(availible_lines) >= 1:
+                line = availible_lines[0]
 
-            # Если линия замкнута (первая точка равна последней) и она не внутри полигона
-            if (line[0] == line[len(line) - 1]) and (not self.border_polygon.contains(
-                    Point(line[0])) or not self.border_polygon.contains(Point(line[len(line) - 1]))):
-                answer_lines.append(availible_lines[0])
-                del availible_lines[0]
-            else:
-                optimal_line_const = 10000000
-                optimal_line_to_merge_index = -1
-                optimal_start_point_to_merge_index = -1
-                optimal_end_point_to_merge_index = -1
-
-                # Проверка минимального расстояния между первой и последней точками самой линии
-                self_distance = (line[0][0] - line[len(line) - 1][0]) ** 2 + (line[0][1] - line[len(line) - 1][1]) ** 2
-
-                if self_distance < optimal_line_const and self_distance < self.max_merge_line_value:
-                    optimal_line_const = self_distance
-                    optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
-
-                # Поиск оптимальной линии для слияния
-                k = 0
-                for test_line in availible_lines:
-                    if test_line == line:  # Проверяем, если линия сама собой, пропускаем до конца цикла
-                        k = k + 1
-                        continue
-
-                    if test_line[0] != test_line[len(test_line) - 1]:
-                        # Проверка первой пары точек: первая точка обеих линий
-                        if(self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(Point(test_line[0]))):
-                            test_distance_1 = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
-                            if test_distance_1 < optimal_line_const and test_distance_1 < self.max_merge_line_value:
-                                optimal_line_const = test_distance_1
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = 0
-                                optimal_end_point_to_merge_index = 0
-
-                        # Проверка второй пары точек: первая точка первой линии и последняя точка второй линии
-                        if (self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(
-                                Point(test_line[-1]))):
-                            test_distance_2 = (test_line[-1][0] - line[0][0]) ** 2 + (test_line[-1][1] - line[0][1]) ** 2
-                            if test_distance_2 < optimal_line_const and test_distance_2 < self.max_merge_line_value:
-                                optimal_line_const = test_distance_2
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = 0
-                                optimal_end_point_to_merge_index = len(test_line) - 1
-
-                        # Проверка третьей пары точек: последние точки обеих линий
-                        if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
-                                Point(test_line[-1]))):
-                            test_distance_3 = (test_line[-1][0] - line[-1][0]) ** 2 + (test_line[-1][1] - line[-1][1]) ** 2
-                            if test_distance_3 < optimal_line_const and test_distance_3 < self.max_merge_line_value:
-                                optimal_line_const = test_distance_3
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = len(line) - 1
-                                optimal_end_point_to_merge_index = len(test_line) - 1
-
-                        if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
-                                Point(test_line[0]))):
-                            # Проверка четвертой пары точек: последняя точка первой линии и первая точка второй линии
-                            test_distance_4 = (test_line[0][0] - line[-1][0]) ** 2 + (test_line[0][1] - line[-1][1]) ** 2
-                            if test_distance_4 < optimal_line_const and test_distance_4 < self.max_merge_line_value:
-                                optimal_line_const = test_distance_4
-                                optimal_line_to_merge_index = k
-                                optimal_start_point_to_merge_index = len(line) - 1
-                                optimal_end_point_to_merge_index = 0
-                    k += 1
-
-                # Если нашлась линия для объединения или линия замыкает сама себя
-                if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
-                    line.append(line[0])  # Добавляем первую точку в конец для замыкания
-                    answer_lines.append(line)
-                    del availible_lines[0]
-                elif optimal_line_to_merge_index != -1:
-                    # Соединение линий
-                    line_to_merge = availible_lines[optimal_line_to_merge_index]
-
-                    if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
-                        line = line_to_merge[::-1] + line
-                    elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line) - 1:
-                        line = line + line_to_merge
-                    elif optimal_start_point_to_merge_index == len(
-                            line) - 1 and optimal_end_point_to_merge_index == len(line_to_merge) - 1:
-                        line = line + line_to_merge[::-1]
-                    elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
-                        line = line + line_to_merge
-                    availible_lines[0] = line
-
-                    del availible_lines[optimal_line_to_merge_index]
-                else:
+                # Если линия замкнута (первая точка равна последней) и она не внутри полигона
+                if (line[0] == line[len(line) - 1]) and (not self.border_polygon.contains(
+                        Point(line[0])) or not self.border_polygon.contains(Point(line[len(line) - 1]))):
                     answer_lines.append(availible_lines[0])
                     del availible_lines[0]
-
-        if availible_lines:
-            answer_lines.append(availible_lines[0])
-
-        return answer_lines
-
-    def FixLine(self, line):
-            if (line[0] != line[len(line) - 1]):
-                if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)-1])):
-                    G = self.create_graph_from_polygon(self.max_border_polygon, self.hight_find_direction)
-
-                    projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line[0])
-                    x_coordinate_start = projection_point.x
-                    y_coordinate_start = projection_point.y
-                    line.insert(0, (x_coordinate_start, y_coordinate_start))
-
-                    start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
-
-                    projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line[len(line) - 1])
-                    x_coordinate_end = projection_point.x
-                    y_coordinate_end = projection_point.y
-                    line.append((x_coordinate_end, y_coordinate_end))
-
-                    end_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_end, y_coordinate_end )))
-
-                    one_way_path = self.find_path_one_way(G, start_vertex, end_vertex)
-                    if one_way_path:
-                        path_points = self.get_path_points(G, one_way_path)
-                        if(len(path_points))>2:
-                            for path_point in path_points:
-                                line.insert(0, (path_point[0], path_point[1]))
-                            line.append(path_points[len(path_points) - 1])
-                        else:
-                            line.insert(0, line[0])
-                    return True
                 else:
-                    print("Fatal Error - Border non closest line" + str(line))
-                    return False
-            return True
+                    optimal_line_const = 10000000
+                    optimal_line_to_merge_index = -1
+                    optimal_start_point_to_merge_index = -1
+                    optimal_end_point_to_merge_index = -1
 
+                    # Проверка минимального расстояния между первой и последней точками самой линии
+                    self_distance = (line[0][0] - line[len(line) - 1][0]) ** 2 + (line[0][1] - line[len(line) - 1][1]) ** 2
 
-    def GeneratedLineByCoords(self, lines_coords):
-        lines = []
-        if (self.apply_merge_line_value):
-            lines_coords = self.MergeNearLines(lines_coords)
-        for line in lines_coords:
-            b_sucsess = True
-            if(self.apply_unborder_draw):
-                b_sucsess = self.FixLine(line)
-            new_line = line_library.ULine(None, [], None, line)
-            new_line.correct_line = b_sucsess
-            new_line.MergeСlosePoints(self.merge_point_value)
-            if (new_line.CheckLineNumberPoint()):
-                new_line.CreatePoligon()
-                lines.append(new_line)
+                    if self_distance < optimal_line_const and self_distance < self.max_merge_line_value:
+                        optimal_line_const = self_distance
+                        optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
 
+                    # Поиск оптимальной линии для слияния
+                    k = 0
+                    for test_line in availible_lines:
+                        if test_line == line:  # Проверяем, если линия сама собой, пропускаем до конца цикла
+                            k = k + 1
+                            continue
+
+                        if test_line[0] != test_line[len(test_line) - 1]:
+                            # Проверка первой пары точек: первая точка обеих линий
+                            if(self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(Point(test_line[0]))):
+                                test_distance_1 = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
+                                if test_distance_1 < optimal_line_const and test_distance_1 < self.max_merge_line_value:
+                                    optimal_line_const = test_distance_1
+                                    optimal_line_to_merge_index = k
+                                    optimal_start_point_to_merge_index = 0
+                                    optimal_end_point_to_merge_index = 0
+
+                            # Проверка второй пары точек: первая точка первой линии и последняя точка второй линии
+                            if (self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(
+                                    Point(test_line[-1]))):
+                                test_distance_2 = (test_line[-1][0] - line[0][0]) ** 2 + (test_line[-1][1] - line[0][1]) ** 2
+                                if test_distance_2 < optimal_line_const and test_distance_2 < self.max_merge_line_value:
+                                    optimal_line_const = test_distance_2
+                                    optimal_line_to_merge_index = k
+                                    optimal_start_point_to_merge_index = 0
+                                    optimal_end_point_to_merge_index = len(test_line) - 1
+
+                            # Проверка третьей пары точек: последние точки обеих линий
+                            if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
+                                    Point(test_line[-1]))):
+                                test_distance_3 = (test_line[-1][0] - line[-1][0]) ** 2 + (test_line[-1][1] - line[-1][1]) ** 2
+                                if test_distance_3 < optimal_line_const and test_distance_3 < self.max_merge_line_value:
+                                    optimal_line_const = test_distance_3
+                                    optimal_line_to_merge_index = k
+                                    optimal_start_point_to_merge_index = len(line) - 1
+                                    optimal_end_point_to_merge_index = len(test_line) - 1
+
+                            if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
+                                    Point(test_line[0]))):
+                                # Проверка четвертой пары точек: последняя точка первой линии и первая точка второй линии
+                                test_distance_4 = (test_line[0][0] - line[-1][0]) ** 2 + (test_line[0][1] - line[-1][1]) ** 2
+                                if test_distance_4 < optimal_line_const and test_distance_4 < self.max_merge_line_value:
+                                    optimal_line_const = test_distance_4
+                                    optimal_line_to_merge_index = k
+                                    optimal_start_point_to_merge_index = len(line) - 1
+                                    optimal_end_point_to_merge_index = 0
+                        k += 1
+
+                    # Если нашлась линия для объединения или линия замыкает сама себя
+                    if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
+                        line.append(line[0])  # Добавляем первую точку в конец для замыкания
+                        answer_lines.append(line)
+                        del availible_lines[0]
+                    elif optimal_line_to_merge_index != -1:
+                        # Соединение линий
+                        line_to_merge = availible_lines[optimal_line_to_merge_index]
+
+                        if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
+                            line = line_to_merge[::-1] + line
+                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line) - 1:
+                            line = line + line_to_merge
+                        elif optimal_start_point_to_merge_index == len(
+                                line) - 1 and optimal_end_point_to_merge_index == len(line_to_merge) - 1:
+                            line = line + line_to_merge[::-1]
+                        elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
+                            line = line + line_to_merge
+                        availible_lines[0] = line
+
+                        del availible_lines[optimal_line_to_merge_index]
+                    else:
+                        answer_lines.append(availible_lines[0])
+                        del availible_lines[0]
+
+            if availible_lines:
+                answer_lines.append(availible_lines[0])
+
+            return answer_lines
+        else:
+            return []
+
+    def FixUnboarderLines(self, setting:UFixingLinesSettings):
+        if(setting.apply_fix_unborder_lines):
+            for line in self.lines:
+                if (line.points[0] != line.points[len(line) - 1]):
+                    if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)-1])):
+                        G = self.create_graph_from_polygon(self.max_border_polygon, self.hight_find_direction)
+
+                        projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line[0])
+                        x_coordinate_start = projection_point.x
+                        y_coordinate_start = projection_point.y
+                        line.insert(0, (x_coordinate_start, y_coordinate_start))
+
+                        start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
+
+                        projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line[len(line) - 1])
+                        x_coordinate_end = projection_point.x
+                        y_coordinate_end = projection_point.y
+                        line.points.append((x_coordinate_end, y_coordinate_end))
+
+                        end_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_end, y_coordinate_end )))
+
+                        one_way_path = self.find_path_one_way(G, start_vertex, end_vertex)
+                        if one_way_path:
+                            path_points = self.get_path_points(G, one_way_path)
+                            if(len(path_points))>2:
+                                for path_point in path_points:
+                                    line.points.insert(0, (path_point[0], path_point[1]))
+                                line.points.append(path_points[len(path_points) - 1])
+                            else:
+                                line.points.insert(0, line[0])
+                        return True
+                    else:
+                        print("Fatal Error - Border non closest line" + str(line))
+                        return False
+                return True
+
+    def GeneratedNestingOfLines(self):
         """ Сама идея очень проста - мы перебираем все элементы последовательно, удаляя пройденный элемент.
-         Поскольку проейденые элементы больше не прокручиваются, кода настолько много - выбирается как себе parent, так и предположительные Child. 
+         Поскольку проейденые элементы больше не прокручиваются, кода настолько много - выбирается как себе parent, так и предположительные Child.
          Проверки работают на случай косяка предыдуших этапов.
         """
-        uncheck_lines = lines.copy()
-        while len(uncheck_lines)>0:
+        uncheck_lines = self.lines.copy()
+        while len(uncheck_lines) > 0:
             check_line = uncheck_lines[0]
             uncheck_lines.remove(check_line)
             min_parent_area = 1000000000
             min_parent = None
             for uncheck_line in uncheck_lines:
-                if(check_line.shapely_polygon.contains(uncheck_line.shapely_polygon)):
-                    if(uncheck_line.parent and check_line.parent):
+                if (check_line.shapely_polygon.contains(uncheck_line.shapely_polygon)):
+                    if (uncheck_line.parent and check_line.parent):
                         if check_line.parent.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             last_parent = uncheck_line.parent
                             uncheck_line.parent = check_line
-                            if(uncheck_line.CheckLineParentLoop()):
+                            if (uncheck_line.CheckLineParentLoop()):
                                 uncheck_line.parent = last_parent
                             else:
                                 if (uncheck_line.parent and check_line in uncheck_line.parent.childs):
@@ -603,19 +652,53 @@ class UHeightMapGenerator:
                         uncheck_line.parent = check_line
                         check_line.childs.append(uncheck_line)
                 else:
-                    if(min_parent_area>uncheck_line.shapely_polygon.area):
+                    if (min_parent_area > uncheck_line.shapely_polygon.area):
                         min_parent = uncheck_line
                         min_parent_area = uncheck_line.shapely_polygon.area
-            if(min_parent):
+            if (min_parent):
                 last_parent = check_line.parent
                 check_line.parent = min_parent
-                if(check_line.CheckLineParentLoop()):
+                if (check_line.CheckLineParentLoop()):
                     check_line.parent = last_parent
                 else:
-                    if(check_line.parent and check_line in check_line.parent.childs):
+                    if (check_line.parent and check_line in check_line.parent.childs):
                         check_line.parent.childs.remove(check_line)
                     check_line.parent.childs.append(check_line)
-        return lines
+
+    def GetAllErrorLines(self):
+        error_lines = []
+        for line in self.lines:
+            if(line.correct_line == False):
+                error_lines.append(line)
+        return error_lines
+
+    def RemoveAllErrorLines(self):
+        error_lines = self.GetAllErrorLines()
+        for error_line in error_lines:
+            self.lines.remove(error_line)
+
+    def GeneratedLineByCoords(self, lines_coords):
+        self.lines = []
+
+        for line in lines_coords:
+            b_sucsess = True
+            new_line = line_library.ULine(None, [], None, line)
+            new_line.correct_line = b_sucsess
+            if (new_line.CheckLineNumberPoint()):
+                new_line.CreatePoligon()
+                self.lines.append(new_line)
+
+        for setting in self.fixing_lines_settings:
+            self.FixMergeNearLines(setting)
+            self.FixUnboarderLines(setting)
+
+        for line in self.lines:
+            line.CreatePoligon()
+            self.GeneratedNestingOfLines()
+
+        if(self.remove_all_error_lines):
+            self.RemoveAllErrorLines()
+
 
     def DrawPlotHeightMap(self, lines):
         max_depth = line_library.GetMaxDepthFromLines(lines)

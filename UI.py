@@ -9,7 +9,7 @@ import PIL.ImageQt as ImageQt
 import helper_functions
 import json
 import os
-from HeightmapGenerator import UHeightMapGenerator
+from HeightmapGenerator import UHeightMapGenerator, UFixingLinesSettings, UAvailibleParceLineSettings
 import line
 from PyQt5.QtGui import QColor
 import UIModulate
@@ -89,14 +89,27 @@ class UHeightmapGeneratorUI(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(scroll_content)
 
-        self.params_array = []
-        
-
         # Автоматическое создание элементов интерфейса для параметров
         self.create_param_controls(self.scroll_layout)
 
         # Добавляем прокручиваемую область на правую панель
+        availible_parce_lines_text_label = QLabel("Recive Line")
+        right_layout.addWidget(availible_parce_lines_text_label)
+        availible_parce_lines_text_label.setAlignment(Qt.AlignCenter)
+
+        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings)
+        right_layout.addWidget(self.availible_parce_lines_array)
+
         right_layout.addWidget(scroll_area)
+
+
+
+        fixing_line_text_lable = QLabel("Fixing Line")
+        right_layout.addWidget(fixing_line_text_lable)
+        fixing_line_text_lable.setAlignment(Qt.AlignCenter)
+        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings)
+
+        right_layout.addWidget(self.fix_line_settings_array)
 
         # Добавляем правый блок в основной layout
         main_layout.addLayout(right_layout)
@@ -133,11 +146,6 @@ class UHeightmapGeneratorUI(QMainWindow):
                     self.create_spinbox(layout, attr_name, value)
                 elif isinstance(value, float):
                     self.create_double_spinbox(layout, attr_name, value)
-        self.combobox_directions = QComboBox()
-        self.combobox_directions.addItems(['both', 'forward', 'backward'])
-        self.combobox_directions.setItemText(['both', 'forward', 'backward'].index(self.settings.hight_find_direction), self.settings.hight_find_direction)
-        layout.addRow("combo_box", self.combobox_directions)
-
         self.combobox_directions = QComboBox()
         self.combobox_directions.addItems(['both', 'forward', 'backward'])
         self.combobox_directions.setItemText(['both', 'forward', 'backward'].index(self.settings.hight_find_direction), self.settings.hight_find_direction)
