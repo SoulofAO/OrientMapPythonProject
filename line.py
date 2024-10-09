@@ -4,11 +4,11 @@ import numpy as np
 import random
 
 class ULine:
-    def __init__(self, parent, childs, shapely_polygon, line):
+    def __init__(self, parent, childs, shapely_polygon, points):
         self.parent = parent
         self.childs = childs
         self.shapely_polygon = shapely_polygon
-        self.line = line
+        self.points = points
         self.color = []
         self.correct_line = True;
         self.power = 1.0
@@ -17,7 +17,7 @@ class ULine:
 
     def GenerateColorByLines(self):
         s = 0
-        for point in self.line:
+        for point in self.points:
             s = s + point[0]+ point[1]
         s = abs(s)
         r = s % 256  # Красный компонент
@@ -65,7 +65,7 @@ class ULine:
         merged_line = []
         previous_point = None
 
-        for point in self.line:
+        for point in self.points:
             if previous_point is None:
                 merged_line.append(point)  # Добавляем первую точку
             else:
@@ -76,13 +76,13 @@ class ULine:
 
             previous_point = point  # Обновляем предыдущую точку
 
-        self.line = merged_line
+        self.points = merged_line
 
     def CreatePoligon(self):
-        self.shapely_polygon = Polygon(self.line)
+        self.shapely_polygon = Polygon(self.points)
 
     def CheckLineNumberPoint(self):
-        return len(self.line)>3
+        return len(self.points)>3
 
 def GetMaxDepthFromLines(lines):
     max_depth = -1

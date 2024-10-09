@@ -11,14 +11,35 @@ import Delegates
 from scipy.spatial import ConvexHull
 
 
+def set_options_to_availible_parce_line_settings(new_options):
+    for default_option in UAvailibleParceLineSettings.default_options:
+        if (not default_option in new_options):
+            new_options.append(default_option)
+    UAvailibleParceLineSettings.options = new_options
+    UAvailibleParceLineSettings.update_name_options_delegate.invoke()
+
 class UAvailibleParceLineSettings:
-    def __init__(self, name = "string", index = 1, options = ["Contour","Index contour"]):
+    options = ["Contour", "Index contour", "ErrorType"]
+    default_options = ["Contour", "Index contour", "ErrorType"]
+    update_name_options_delegate = Delegates.UDelegate()
+
+    def __eq__(self, other):
+        if(other):
+            return self.name == other.name
+        else:
+            return False
+
+    def update_options_by_global_options(self):
+        self.name_options = UAvailibleParceLineSettings.options
+        self.update_name_options_delegate.invoke()
+
+    def __init__(self, name = "string", index = 1):
         self.name = name
-        self.name_options = options
+        self.name_options = UAvailibleParceLineSettings.options
         self.index = index
 
         self.ui_show_tag = ["name", "index"]
-        self.ui_show_tag = ["name", "index"]
+        self.save_tag = ["name", "index"]
 
     def __str__(self):
         string = ""
@@ -52,11 +73,13 @@ class UFixingLinesSettings:
 
         self.apply_fix_unborder_lines = True
         self.apply_merge_line_value = True
+        self.regenerate_borders = True
 
-        self.ui_save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value"]
+        self.save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders"]
         self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders"]
+
 
     def __str__(self):
         string = ""
@@ -77,7 +100,7 @@ class UFixingLinesSettings:
 class UHeightMapGenerator:
     def __init__(self):
         # 1. Параметры ввода/вывода
-        self.bna_file_path = "None"  # Путь к файлу BNA
+        self.__bna_file_path = "None"  # Путь к файлу BNA
 
         # 2. Параметры размера и границ
         self.global_scale_multiplier = 0.2  # Глобальный масштаб
@@ -101,7 +124,7 @@ class UHeightMapGenerator:
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
 
-        self.fixing_lines_settings = []  # Настройки для исправления линий
+        self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines = []  # Линии, которые будут обрабатываться
 
         # 5. Прочие настройки и делегаты
@@ -115,6 +138,7 @@ class UHeightMapGenerator:
         self.ui_show_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines']
+
 
 
     def to_dict(self):
@@ -132,11 +156,50 @@ class UHeightMapGenerator:
                 setattr(self, k, v)
             elif k == "fixing_lines_settings":
                 # Десериализация списка fixing_lines_settings
-                self.fixing_lines_settings = [UFixingLinesSettings().from_dict(item) for item in v]
+                self.fixing_lines_settings.clear()
+                for item in v:
+                    new_fixing_lines_setting = UFixingLinesSettings()
+                    new_fixing_lines_setting.from_dict(item)
+                    self.fixing_lines_settings.append(new_fixing_lines_setting)
             elif k == 'availible_parce_settings':
                 # Десериализация списка availible_parce_settings
-                self.availible_parce_settings = [UAvailibleParceLineSettings().from_dict(item) for item in v]
+                self.availible_parce_settings.clear()
+                for item in v:
+                    new_availible_parce_line_setting = UAvailibleParceLineSettings()
+                    new_availible_parce_line_setting.from_dict(item)
+                    self.availible_parce_settings.append(new_availible_parce_line_setting)
+                    print(new_availible_parce_line_setting)
 
+    @property
+    def bna_file_path(self):
+        # Геттер для переменной value
+        return self.__bna_file_path
+
+    @bna_file_path.setter
+    def bna_file_path(self, bna_file_path):
+        # Сеттер, который будет вызван при присвоении значения
+        self.__bna_file_path = bna_file_path
+        self.UpdateAvailibleParceLineOptions(helper_functions.ReadFile(self.__bna_file_path))
+
+    def find_availible_parce_setting_by_name(self, name):
+        for availible_parce_setting in self.availible_parce_settings:
+            if(availible_parce_setting.name == name):
+                return availible_parce_setting
+        return None
+
+    def UpdateAvailibleParceLineOptions(self, data):
+        options = []
+        for line in data.splitlines():
+            stripped_line = line.strip()
+            points = stripped_line.split(',')
+            if not helper_functions.can_convert_to_float(points[0]):
+                points[0] = points[0].strip('"').strip()
+                if(not points[0] in options):
+                    options.append(points[0])
+        set_options_to_availible_parce_line_settings(options)
+        for option in self.availible_parce_settings:
+            if(option):
+                option.update_options_by_global_options()
 
     def ParseAllFromData(self, data):
         lines = []
@@ -170,7 +233,7 @@ class UHeightMapGenerator:
             points = stripped_line.split(',')
             if not helper_functions.can_convert_to_float(points[0]):
                 points[0] = points[0].strip('"').strip()
-                if points[0] in self.availible_parce_data:
+                if self.find_availible_parce_setting_by_name(points[0]) !=None:
                     correct_data = True;
                     if current_line:
                         lines.append(current_line)
@@ -189,15 +252,13 @@ class UHeightMapGenerator:
 
         return lines
 
-    def SetupBorderPoligonsDataFromLines(self, lines_coords, border_distance):
+    def SetupBorderPoligonsDataFromLines(self, border_distance):
         """
-        Формирует два полигона (уменьшенный и расширенный) на основе координат линий.
-
-        :param lines_coords: Список отрезков в формате [[[x1, y1], [x2, y2]], ...]
+            Generated Border By Lines inside.
         """
         points = []
-        for line in lines_coords:
-            for segment in line:
+        for line in self.lines:
+            for segment in line.points:
                 points.append(segment)
 
         points = np.array(points)
@@ -326,15 +387,15 @@ class UHeightMapGenerator:
                 max_border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
             draw.line(max_border_coords, fill="green", width=2)
 
-            for line in lines:
+            for line in self.lines:
                 if(line.correct_line):
-                    if len(line.line) >= 2:
-                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.line]
+                    if len(line.points) >= 2:
+                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
                         draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]),
                                   width=2)
                 else:
-                    if len(line.line) >= 2:
-                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.line]
+                    if len(line.points) >= 2:
+                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
                         for i in range(len(flat_coords)-1):
                             self.draw_two_color_line(draw, flat_coords[i], flat_coords[i+1], 'red', 'white', width=2, step=10)
 
@@ -495,8 +556,8 @@ class UHeightMapGenerator:
                 line = availible_lines[0]
 
                 # Если линия замкнута (первая точка равна последней) и она не внутри полигона
-                if (line[0] == line[len(line) - 1]) and (not self.border_polygon.contains(
-                        Point(line[0])) or not self.border_polygon.contains(Point(line[len(line) - 1]))):
+                if (line.points[0] == line.points[-1]) and (not self.border_polygon.contains(
+                        Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1]))):
                     answer_lines.append(availible_lines[0])
                     del availible_lines[0]
                 else:
@@ -506,9 +567,9 @@ class UHeightMapGenerator:
                     optimal_end_point_to_merge_index = -1
 
                     # Проверка минимального расстояния между первой и последней точками самой линии
-                    self_distance = (line[0][0] - line[len(line) - 1][0]) ** 2 + (line[0][1] - line[len(line) - 1][1]) ** 2
+                    self_distance = (line.points[0][0] - line.points[-1][0]) ** 2 + (line.points[0][1] - line.points[-1][1]) ** 2
 
-                    if self_distance < optimal_line_const and self_distance < self.max_merge_line_value:
+                    if self_distance < optimal_line_const and self_distance < setting.max_merge_line_value:
                         optimal_line_const = self_distance
                         optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
 
@@ -519,10 +580,10 @@ class UHeightMapGenerator:
                             k = k + 1
                             continue
 
-                        if test_line[0] != test_line[len(test_line) - 1]:
+                        if test_line.points[0] != test_line.points[-1]:
                             # Проверка первой пары точек: первая точка обеих линий
-                            if(self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(Point(test_line[0]))):
-                                test_distance_1 = (test_line[0][0] - line[0][0]) ** 2 + (test_line[0][1] - line[0][1]) ** 2
+                            if(self.border_polygon.contains(Point(line.points[0])) and self.border_polygon.contains(Point(test_line.points[0]))):
+                                test_distance_1 = (test_line.points[0][0] - line.points[0][0]) ** 2 + (test_line.points[0][1] - line.points[0][1]) ** 2
                                 if test_distance_1 < optimal_line_const and test_distance_1 < self.max_merge_line_value:
                                     optimal_line_const = test_distance_1
                                     optimal_line_to_merge_index = k
@@ -530,55 +591,55 @@ class UHeightMapGenerator:
                                     optimal_end_point_to_merge_index = 0
 
                             # Проверка второй пары точек: первая точка первой линии и последняя точка второй линии
-                            if (self.border_polygon.contains(Point(line[0])) and self.border_polygon.contains(
-                                    Point(test_line[-1]))):
-                                test_distance_2 = (test_line[-1][0] - line[0][0]) ** 2 + (test_line[-1][1] - line[0][1]) ** 2
+                            if (self.border_polygon.contains(Point(line.points[0])) and self.border_polygon.contains(
+                                    Point(test_line.points[-1]))):
+                                test_distance_2 = (test_line.points[-1][0] - line.points[0][0]) ** 2 + (test_line.points[-1][1] - line.points[0][1]) ** 2
                                 if test_distance_2 < optimal_line_const and test_distance_2 < self.max_merge_line_value:
                                     optimal_line_const = test_distance_2
                                     optimal_line_to_merge_index = k
                                     optimal_start_point_to_merge_index = 0
-                                    optimal_end_point_to_merge_index = len(test_line) - 1
+                                    optimal_end_point_to_merge_index = len(test_line.points) - 1
 
                             # Проверка третьей пары точек: последние точки обеих линий
-                            if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
-                                    Point(test_line[-1]))):
-                                test_distance_3 = (test_line[-1][0] - line[-1][0]) ** 2 + (test_line[-1][1] - line[-1][1]) ** 2
+                            if (self.border_polygon.contains(Point(line.points[-1])) and self.border_polygon.contains(
+                                    Point(test_line.points[-1]))):
+                                test_distance_3 = (test_line.points[-1][0] - line.points[-1][0]) ** 2 + (test_line.points[-1][1] - line.points[-1][1]) ** 2
                                 if test_distance_3 < optimal_line_const and test_distance_3 < self.max_merge_line_value:
                                     optimal_line_const = test_distance_3
                                     optimal_line_to_merge_index = k
-                                    optimal_start_point_to_merge_index = len(line) - 1
-                                    optimal_end_point_to_merge_index = len(test_line) - 1
+                                    optimal_start_point_to_merge_index = len(line.points) - 1
+                                    optimal_end_point_to_merge_index = len(test_line.points) - 1
 
-                            if (self.border_polygon.contains(Point(line[-1])) and self.border_polygon.contains(
-                                    Point(test_line[0]))):
+                            if (self.border_polygon.contains(Point(line.points[-1])) and self.border_polygon.contains(
+                                    Point(test_line.points[0]))):
                                 # Проверка четвертой пары точек: последняя точка первой линии и первая точка второй линии
-                                test_distance_4 = (test_line[0][0] - line[-1][0]) ** 2 + (test_line[0][1] - line[-1][1]) ** 2
+                                test_distance_4 = (test_line.points[0][0] - line.points[-1][0]) ** 2 + (test_line.points[0][1] - line.points[-1][1]) ** 2
                                 if test_distance_4 < optimal_line_const and test_distance_4 < self.max_merge_line_value:
                                     optimal_line_const = test_distance_4
                                     optimal_line_to_merge_index = k
-                                    optimal_start_point_to_merge_index = len(line) - 1
+                                    optimal_start_point_to_merge_index = len(line.points) - 1
                                     optimal_end_point_to_merge_index = 0
                         k += 1
 
                     # Если нашлась линия для объединения или линия замыкает сама себя
                     if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
-                        line.append(line[0])  # Добавляем первую точку в конец для замыкания
-                        answer_lines.append(line)
+                        line.points.append(line.points[0])  # Добавляем первую точку в конец для замыкания
+                        answer_lines.append(line.points)
                         del availible_lines[0]
                     elif optimal_line_to_merge_index != -1:
                         # Соединение линий
                         line_to_merge = availible_lines[optimal_line_to_merge_index]
 
                         if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
-                            line = line_to_merge[::-1] + line
-                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line) - 1:
-                            line = line + line_to_merge
+                            line.points = line_to_merge.points[::-1] + line.points
+                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line.points) - 1:
+                            line.points = line.points + line_to_merge.points
                         elif optimal_start_point_to_merge_index == len(
-                                line) - 1 and optimal_end_point_to_merge_index == len(line_to_merge) - 1:
-                            line = line + line_to_merge[::-1]
-                        elif optimal_start_point_to_merge_index == len(line) - 1 and optimal_end_point_to_merge_index == 0:
-                            line = line + line_to_merge
-                        availible_lines[0] = line
+                                line.points) - 1 and optimal_end_point_to_merge_index == len(line_to_merge) - 1:
+                            line.points = line.points + line_to_merge.points[::-1]
+                        elif optimal_start_point_to_merge_index == len(line.points) - 1 and optimal_end_point_to_merge_index == 0:
+                            line.points = line.points + line_to_merge.points
+                        availible_lines[0].points = line.points
 
                         del availible_lines[optimal_line_to_merge_index]
                     else:
@@ -595,18 +656,18 @@ class UHeightMapGenerator:
     def FixUnboarderLines(self, setting:UFixingLinesSettings):
         if(setting.apply_fix_unborder_lines):
             for line in self.lines:
-                if (line.points[0] != line.points[len(line) - 1]):
-                    if not self.border_polygon.contains(Point(line[0])) or not self.border_polygon.contains(Point(line[len(line)-1])):
-                        G = self.create_graph_from_polygon(self.max_border_polygon, self.hight_find_direction)
+                if (line.points[0] != line.points[-1]):
+                    if not self.border_polygon.contains(Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1])):
+                        G = self.create_graph_from_polygon(self.max_border_polygon, setting.hight_find_direction)
 
-                        projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line[0])
+                        projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line.points[0])
                         x_coordinate_start = projection_point.x
                         y_coordinate_start = projection_point.y
-                        line.insert(0, (x_coordinate_start, y_coordinate_start))
+                        line.points.insert(0, (x_coordinate_start, y_coordinate_start))
 
                         start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
 
-                        projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line[len(line) - 1])
+                        projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line.points[-1])
                         x_coordinate_end = projection_point.x
                         y_coordinate_end = projection_point.y
                         line.points.append((x_coordinate_end, y_coordinate_end))
@@ -621,7 +682,7 @@ class UHeightMapGenerator:
                                     line.points.insert(0, (path_point[0], path_point[1]))
                                 line.points.append(path_points[len(path_points) - 1])
                             else:
-                                line.points.insert(0, line[0])
+                                line.points.insert(0, line.points[0])
                         return True
                     else:
                         print("Fatal Error - Border non closest line" + str(line))
@@ -691,13 +752,17 @@ class UHeightMapGenerator:
                 new_line.CreatePoligon()
                 self.lines.append(new_line)
 
+        self.SetupBorderPoligonsDataFromLines(-2)
+
         for setting in self.fixing_lines_settings:
             self.FixMergeNearLines(setting)
+            if(setting.regenerate_borders):
+                self.SetupBorderPoligonsDataFromLines(setting.border_distance)
             self.FixUnboarderLines(setting)
 
         for line in self.lines:
             line.CreatePoligon()
-            self.GeneratedNestingOfLines()
+        self.GeneratedNestingOfLines()
 
         if(self.remove_all_error_lines):
             self.RemoveAllErrorLines()
@@ -771,7 +836,7 @@ class UHeightMapGenerator:
             if (self.draw_debug_lines):
                 data_all = self.ParseAllFromData(data)
                 data_lines = self.ParseLinesFromData(data)
-                self.lines = self.GenerateLinesByLineData(data_lines)
+                self.GenerateLinesByLineData(data_lines)
                 print(self.width, self.height)
                 self.DebugDrawLines(self.lines)
                 self.end_cook_delegate.invoke()

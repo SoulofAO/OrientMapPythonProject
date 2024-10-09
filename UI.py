@@ -107,7 +107,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         fixing_line_text_lable = QLabel("Fixing Line")
         right_layout.addWidget(fixing_line_text_lable)
         fixing_line_text_lable.setAlignment(Qt.AlignCenter)
-        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings, [])
+        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings, self.settings.fixing_lines_settings)
 
         right_layout.addWidget(self.fix_line_settings_array)
 

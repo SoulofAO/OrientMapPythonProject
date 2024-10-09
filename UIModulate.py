@@ -11,6 +11,7 @@ class UArrayWidget(QWidget):
         self.settings_class = settings_class
         self.param_widgets = []
         self.settings_list = settings_list
+        self.unique_values = False
         self.font_size = font_size
         self.initUI()
 
@@ -54,6 +55,17 @@ class UArrayWidget(QWidget):
 
         self.list_widget.currentRowChanged.connect(self.load_settings)
 
+    def update_options(self):
+        settings = self.settings_class()
+        for attr_name in settings.ui_show_tag:
+            if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
+                value = getattr(settings, attr_name)
+                find_setting = self.find_settings_by_name(attr_name)
+                if find_setting:
+                    if (isinstance(value, str) and hasattr(settings, str(attr_name + "_options"))):
+                        options = getattr(settings, str(attr_name + "_options"))
+                        find_setting.addItems(options)
+
     def generate_settings(self, layout):
         settings = self.settings_class()
 
@@ -72,6 +84,9 @@ class UArrayWidget(QWidget):
                     self.create_checkbox(layout, attr_name, value)
                 elif (isinstance(value, str) and hasattr(settings, str(attr_name+"_options"))):
                     options = getattr(settings, str(attr_name+"_options"))
+                    if(hasattr(settings, str("update_"+attr_name+"_options_delegate"))):
+                        update_delegate = getattr(settings, str("update_"+attr_name+"_options_delegate"))
+                        update_delegate.add(self.update_options)
                     self.create_options(layout,attr_name,value, options)
                 elif isinstance(value, int):
                     self.create_spinbox(layout, attr_name, value)
@@ -100,9 +115,12 @@ class UArrayWidget(QWidget):
                         find_setting.setChecked(value)
                     elif (isinstance(value, str) and hasattr(settings, str(attr_name + "_options"))):
                         options = getattr(settings, str(attr_name + "_options"))
-                        find_setting.setCurrentIndex(options.index(value))
                         find_setting.clear()
                         find_setting.addItems(options)
+                        if(value in options):
+                            find_setting.setCurrentIndex(options.index(value))
+                        else:
+                            find_setting.setCurrentIndex(options.index("ErrorType"))
                     elif isinstance(value, int):
                         find_setting.setValue(value)
                     elif isinstance(value, float):
@@ -134,10 +152,8 @@ class UArrayWidget(QWidget):
         new_setting = self.settings_class()
         self.create_new_setting(new_setting)
 
-        # Добавляем настройку в список
         self.settings_list.append(new_setting)
         self.edit_setting(new_setting)
-
         self.clear_inputs()
 
 
@@ -181,7 +197,6 @@ class UArrayWidget(QWidget):
         if settings is None:
             current_row = self.list_widget.currentRow()
             settings = self.settings_list[current_row]
-
         for attr_name in settings.ui_show_tag:
             widget = self.find_settings_by_name(attr_name)
             if widget:
@@ -195,6 +210,7 @@ class UArrayWidget(QWidget):
                     setattr(settings, attr_name, widget.text())
                 elif isinstance(widget, QComboBox):
                     setattr(settings, attr_name, widget.currentText())
+
 
         self.update_settings(settings)
 
