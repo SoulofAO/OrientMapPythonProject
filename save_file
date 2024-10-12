@@ -1,10 +1,11 @@
 {
-    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLine.bna",
+    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLineV7.bna",
     "global_scale_multiplier": 0.2,
     "first_level_distance": 50,
     "max_distance_to_border_polygon": 100,
     "draw_with_max_border_polygon": true,
     "remove_all_error_lines": false,
+    "min_owner_overlap": 0.95,
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,

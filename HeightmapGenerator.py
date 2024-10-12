@@ -124,6 +124,7 @@ class UHeightMapGenerator:
 
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
+        self.min_owner_overlap = 0.95
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines = []  # Линии, которые будут обрабатываться
@@ -136,10 +137,10 @@ class UHeightMapGenerator:
 
         self.save_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'remove_all_error_lines']
+                         'remove_all_error_lines','min_owner_overlap']
         self.ui_show_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                            'remove_all_error_lines']
+                            'remove_all_error_lines','min_owner_overlap']
 
 
 
@@ -724,7 +725,7 @@ class UHeightMapGenerator:
             min_parent = None
             for uncheck_line in uncheck_lines:
                 try:
-                    if (check_line.shapely_polygon.contains(uncheck_line.shapely_polygon)):
+                    if (check_line.evaluate_polygon_overlap(uncheck_line)>self.min_owner_overlap):
                         if check_line.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             last_parent = uncheck_line.parent
                             uncheck_line.parent = check_line
@@ -738,7 +739,7 @@ class UHeightMapGenerator:
                             uncheck_line.parent = check_line
                             check_line.childs.append(uncheck_line)
                     else:
-                        if (uncheck_line.shapely_polygon and uncheck_line.shapely_polygon.contains(check_line.shapely_polygon) and min_parent_area > uncheck_line.shapely_polygon.area):
+                        if (uncheck_line.shapely_polygon and uncheck_line.evaluate_polygon_overlap(check_line)>self.min_owner_overlap and min_parent_area > uncheck_line.shapely_polygon.area):
                             min_parent = uncheck_line
                             min_parent_area = uncheck_line.shapely_polygon.area
                 except:
