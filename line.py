@@ -98,8 +98,20 @@ class ULine:
         :param polygon_inner: внутренний полигон (Polygon)
         :return: float - степень вложенности от 0 до 1
         """
-        inner_area = line.shapely_polygon.area
-        intersection_area = self.shapely_polygon.intersection(line.shapely_polygon).area
+        t_new = []
+        t1_new = []
+
+        for x in range(len(self.points)):
+            t_new.append([int(self.points[x][0]), int(self.points[x][1])])
+
+        for x in range(len(line.points)):
+            t1_new.append([int(line.points[x][0]), int(line.points[x][1])])
+
+        outer_polygon = Polygon(t_new)  # Внешний полигон
+        inner_polygon = Polygon(t1_new)
+
+        inner_area = inner_polygon.area
+        intersection_area = outer_polygon.intersection(inner_polygon).area
 
         if inner_area == 0:
             return 0

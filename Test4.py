@@ -1,4 +1,5 @@
 from shapely.geometry import Polygon
+import math
 
 def evaluate_polygon_overlap(polygon_outer, polygon_inner):
     """
@@ -19,16 +20,30 @@ def evaluate_polygon_overlap(polygon_outer, polygon_inner):
 
 
 # Тест 1: Полное вложение
-outer_polygon_1 = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])  # Внешний полигон
-inner_polygon_1 = Polygon([(2, 2), (8, 2), (8, 8), (2, 8)])      # Внутренний полигон
+t = [(159.17041765207983, 24.339786909778155), (22.60954416067807, 204.25175457876782), [-1.6460000000000001, 107.23800000000001], [71.858, -24.41], (159.17041765207983, 24.339786909778155)]
+t1 = [(58.77313063141416, -135.92337906925488), (216.07071435466855, -77.57045280918136), (64.57740516987266, 193.75887848653062), (-97.60009178398376, 234.30677250746174), (-23.466455839321938, 215.7717545787678), [-47.72200000000001, 118.758], [-139.328, -44.706], [-112.998, -46.352000000000004], [37.85, -37.026], (44.02060092318067, -136.83543684966287), (58.77313063141416, -135.92337906925488)]     # Внутренний полигон
+
+t_new = []
+t1_new = []
+for x in range(len(t)):
+    t_new.append([int(t[x][0]), int(t[x][1])])
+
+for x in range(len(t1)):
+    t1_new.append([int(t1[x][0]), int(t1[x][1])])
+
+
+outer_polygon_1 = Polygon(t_new)  # Внешний полигон
+inner_polygon_1 = Polygon(t1_new)
+
 result_1 = evaluate_polygon_overlap(outer_polygon_1, inner_polygon_1)
 result_1 = evaluate_polygon_overlap(inner_polygon_1,outer_polygon_1)
 print(f"Тест 1 (полное вложение): {result_1} (ожидаем 1)")
 
 # Тест 2: Частичное вложение
-outer_polygon_2 = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-inner_polygon_2 = Polygon([(5, 5), (15, 5), (15, 15), (5, 15)])  # Пересекается частично
+outer_polygon_2 = Polygon([(0, 0), [5, 0], [5, 5], (10, 5), (0,5),(0,0)])
+inner_polygon_2 = Polygon([(0, 0), (5, 5), [0, 5],[0,0]])  # Пересекается частично
 result_2 = evaluate_polygon_overlap(outer_polygon_2, inner_polygon_2)
+result_2 = evaluate_polygon_overlap(inner_polygon_2, outer_polygon_2)
 print(f"Тест 2 (частичное вложение): {result_2} (ожидаем значение между 0 и 1)")
 
 # Тест 3: Нет пересечения

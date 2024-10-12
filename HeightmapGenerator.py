@@ -651,13 +651,17 @@ class UHeightMapGenerator:
 
                         if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
                             line.points =  line_to_merge.points[::-1] + line.points
+                            line.start_points = line_to_merge.start_points[::-1] + line.start_points
                         elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
                             line.points = line.points + line_to_merge.points[::-1]
+                            line.start_points = line.start_points + line_to_merge.start_points[::-1]
                         elif optimal_start_point_to_merge_index == (len(
                                 line.points) - 1) and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
                             line.points = line.points + line_to_merge.points[::-1]
+                            line.start_points = line.start_points + line_to_merge.start_points[::-1]
                         elif optimal_start_point_to_merge_index == (len(line.points) - 1) and optimal_end_point_to_merge_index == 0:
                             line.points = line.points + line_to_merge.points
+                            line.start_points = line.start_points + line_to_merge.start_points
 
                         del availible_lines[optimal_line_to_merge_index]
                     else:
@@ -725,6 +729,7 @@ class UHeightMapGenerator:
             min_parent = None
             for uncheck_line in uncheck_lines:
                 try:
+                    print(check_line.evaluate_polygon_overlap(uncheck_line))
                     if (check_line.evaluate_polygon_overlap(uncheck_line)>self.min_owner_overlap):
                         if check_line.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             last_parent = uncheck_line.parent
@@ -739,6 +744,7 @@ class UHeightMapGenerator:
                             uncheck_line.parent = check_line
                             check_line.childs.append(uncheck_line)
                     else:
+                        print(uncheck_line.evaluate_polygon_overlap(check_line))
                         if (uncheck_line.shapely_polygon and uncheck_line.evaluate_polygon_overlap(check_line)>self.min_owner_overlap and min_parent_area > uncheck_line.shapely_polygon.area):
                             min_parent = uncheck_line
                             min_parent_area = uncheck_line.shapely_polygon.area

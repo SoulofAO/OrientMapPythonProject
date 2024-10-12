@@ -9,8 +9,8 @@
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 1000,
-            "border_distance": -10,
+            "max_merge_line_value": 10000,
+            "border_distance": 5,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
