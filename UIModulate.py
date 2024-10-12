@@ -107,7 +107,7 @@ class UArrayWidget(QWidget):
 
     def load_settings(self, current_row=-1):
         current_row = self.list_widget.currentRow()
-        if(current_row>0 and len(self.settings_list)>current_row):
+        if(current_row>=0 and len(self.settings_list)>current_row):
             settings = self.settings_list[current_row]
             for attr_name in settings.ui_show_tag:
                 if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):

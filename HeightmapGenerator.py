@@ -642,6 +642,7 @@ class UHeightMapGenerator:
                     # Если нашлась линия для объединения или линия замыкает сама себя
                     if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
                         line.points.append(line.points[0])  # Добавляем первую точку в конец для замыкания
+                        line.start_points.append(line.points[0])
                         answer_lines.append(line)
                         del availible_lines[0]
                     elif optimal_line_to_merge_index != -1:
@@ -649,15 +650,14 @@ class UHeightMapGenerator:
                         line_to_merge = availible_lines[optimal_line_to_merge_index]
 
                         if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
-                            line.points = line_to_merge.points[::-1] + line.points
-                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == len(line.points) - 1:
-                            line.points = line.points + line_to_merge.points
-                        elif optimal_start_point_to_merge_index == len(
-                                line.points) - 1 and optimal_end_point_to_merge_index == len(line_to_merge.points) - 1:
+                            line.points =  line_to_merge.points[::-1] + line.points
+                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
                             line.points = line.points + line_to_merge.points[::-1]
-                        elif optimal_start_point_to_merge_index == len(line.points) - 1 and optimal_end_point_to_merge_index == 0:
+                        elif optimal_start_point_to_merge_index == (len(
+                                line.points) - 1) and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
+                            line.points = line.points + line_to_merge.points[::-1]
+                        elif optimal_start_point_to_merge_index == (len(line.points) - 1) and optimal_end_point_to_merge_index == 0:
                             line.points = line.points + line_to_merge.points
-                        availible_lines[0].points = line.points
 
                         del availible_lines[optimal_line_to_merge_index]
                     else:

@@ -1,5 +1,5 @@
 {
-    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLineV7.bna",
+    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLineV10.bna",
     "global_scale_multiplier": 0.2,
     "first_level_distance": 50,
     "max_distance_to_border_polygon": 100,
@@ -9,26 +9,8 @@
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 200,
+            "max_merge_line_value": 1000,
             "border_distance": -10,
-            "hight_find_direction": "both",
-            "apply_fix_unborder_lines": true,
-            "apply_merge_line_value": true,
-            "regenerate_borders": true
-        },
-        {
-            "merge_point_value": 0,
-            "max_merge_line_value": 100,
-            "border_distance": -10,
-            "hight_find_direction": "both",
-            "apply_fix_unborder_lines": true,
-            "apply_merge_line_value": true,
-            "regenerate_borders": true
-        },
-        {
-            "merge_point_value": 0,
-            "max_merge_line_value": 0,
-            "border_distance": 10,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
