@@ -2,8 +2,10 @@ import sys
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout,
     QLineEdit, QPushButton,
-    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem, QComboBox
+    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem, QComboBox, QShortcut
 )
+from PyQt5.QtGui import QKeySequence
+
 
 class UArrayWidget(QWidget):
     def __init__(self, settings_class, settings_list, font_size = 12.0):
@@ -49,6 +51,9 @@ class UArrayWidget(QWidget):
         delete_button = QPushButton("Delete")
         delete_button.clicked.connect(self.delete_setting)
         button_layout.addWidget(delete_button)
+
+        self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
+        self.delete_shortcut.activated.connect(self.delete_setting)
 
         layout.addLayout(button_layout)
         self.setLayout(layout)
@@ -229,7 +234,7 @@ class UArrayWidget(QWidget):
 
     def create_spinbox(self, layout, attr_name, value):
         spin_box = QSpinBox()
-        spin_box.setMinimum(0)
+        spin_box.setMinimum(-100000)
         spin_box.setMaximum(100000)
         spin_box.setValue(value)
         layout.addRow(attr_name, spin_box)
@@ -239,7 +244,7 @@ class UArrayWidget(QWidget):
         """Создание ввода числа для вещественных параметров."""
         spin_box = QDoubleSpinBox()
         spin_box.setDecimals(2)  # Задаем точность до двух знаков после запятой
-        spin_box.setMinimum(0.0)
+        spin_box.setMinimum(-100000.0)
         spin_box.setMaximum(100000.0)  # Изменяй максимальное значение по необходимости
         spin_box.setSingleStep(0.01)  # Шаг изменения значения
         spin_box.setValue(value)

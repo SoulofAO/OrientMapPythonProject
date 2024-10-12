@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout, QCheckBox,
-    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem
+    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar
 )
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -13,6 +13,7 @@ from HeightmapGenerator import UHeightMapGenerator, UFixingLinesSettings, UAvail
 import line
 from PyQt5.QtGui import QColor
 import UIModulate
+from playsound import playsound
 
 class UHeightmapGenerationWarperThread(QThread):
     def __init__(self):
@@ -57,10 +58,24 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.image_label.setAlignment(Qt.AlignCenter)
         left_layout.addWidget(self.image_label)
 
+        progress_layout = QHBoxLayout()
+
+        self.progress_text = QLabel("")
+        progress_layout.addWidget(self.progress_text)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setGeometry(30, 40, 300, 25)  # Размер и положение прогресс-бара
+        self.progress_bar.setMaximum(100)  # Устанавливаем максимальное значение
+        progress_layout.addWidget(self.progress_bar)
+
+        left_layout.addLayout(progress_layout)
+
         self.tree_lines = QTreeWidget()
         self.tree_lines.setColumnCount(1)  # Указываем количество колонок
         self.tree_lines.setHeaderLabels(["Items"])  # Название колонки
         left_layout.addWidget(self.tree_lines)
+
+
 
         self.load_button = QPushButton("Load File")
         self.reset_button = QPushButton("Reset Data")
@@ -117,7 +132,13 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
 
+
+
         self.thread_warper = UHeightmapGenerationWarperThread()
+
+    def updateProgress(self, value):
+        # Обновляем значение прогресс-бара
+        self.progress.setValue(value)
 
     def UpdateLoadedStatusText(self):
         if(self.settings.bna_file_path):
@@ -235,7 +256,8 @@ class UHeightmapGeneratorUI(QMainWindow):
                     setattr(self.settings, attr_name, widget.isChecked())
                 elif isinstance(widget, QComboBox):
                     setattr(self.settings, attr_name, widget.currentText())
-        print(self.settings.max_distance_to_border_polygon)
+        self.settings.availible_parce_settings = self.availible_parce_lines_array.settings_list
+        self.settings.fixing_lines_settings = self.fix_line_settings_array.settings_list
         self.UpdateLoadedStatusText()
         self.save_settings_to_file("save_file")
         print("Параметры обновлены:", vars(self.settings))
@@ -247,6 +269,9 @@ class UHeightmapGeneratorUI(QMainWindow):
             loaded_pixmap = QPixmap(save_path)
             self.image_label.setPixmap(loaded_pixmap)
             self.UpdateLines()
+            self.settings.end_cook_delegate.remove(self.on_image_cooked)
+            playsound('Complete.wav')
+
 
     def on_apply(self):
         self.ApplyAllVariableAndSave()

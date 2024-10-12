@@ -8,7 +8,8 @@ class ULine:
         self.parent = parent
         self.childs = childs
         self.shapely_polygon = shapely_polygon
-        self.points = points
+        self.points = points.copy()
+        self.start_points = points.copy()
         self.color = []
         self.correct_line = True;
         self.power = 1.0
@@ -32,13 +33,13 @@ class ULine:
         else:
             return self
 
-    def CheckLineParentLoop(self, visited_lines=[]):
+    def CheckLineParentLoop(self, visited_lines):
         if (self in visited_lines):
             return True
         else:
-            if (self.GetRootLine()):
+            if (self.parent):
                 visited_lines.append(self)
-                return self.GetRootLine().CheckLineParentLoop(visited_lines)
+                return self.parent.CheckLineParentLoop(visited_lines)
             else:
                 return False
 
@@ -79,7 +80,10 @@ class ULine:
         self.points = merged_line
 
     def CreatePoligon(self):
-        self.shapely_polygon = Polygon(self.points)
+        if(self.CheckLineNumberPoint()):
+            self.shapely_polygon = Polygon(self.points)
+        else:
+            self.correct_line = False
 
     def CheckLineNumberPoint(self):
         return len(self.points)>3
