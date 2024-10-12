@@ -88,6 +88,24 @@ class ULine:
     def CheckLineNumberPoint(self):
         return len(self.points)>3
 
+    def evaluate_polygon_overlap(self, polygon_inner):
+        """
+        Оценивает степень вложенности полигона polygon_inner в polygon_outer от 0 до 1.
+        1 - polygon_inner полностью вложен в polygon_outer,
+        0 - нет пересечений.
+
+        :param polygon_outer: внешний полигон (Polygon)
+        :param polygon_inner: внутренний полигон (Polygon)
+        :return: float - степень вложенности от 0 до 1
+        """
+        inner_area = polygon_inner.area
+        intersection_area = self.polygon_outer.intersection(polygon_inner).area
+
+        if inner_area == 0:
+            return 0
+        return intersection_area / inner_area
+
+
 def GetMaxDepthFromLines(lines):
     max_depth = -1
     for line in lines:

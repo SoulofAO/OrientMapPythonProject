@@ -1,8 +1,9 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout, QCheckBox,
-    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar
+    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar, QShortcut
 )
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import PIL.ImageQt as ImageQt
@@ -132,9 +133,24 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
 
+        self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
+        self.delete_shortcut.activated.connect(self.delete_key_event)
 
+        self.apply_shortcut = QShortcut(QKeySequence(Qt.Key_Return), self)
+        self.apply_shortcut.activated.connect(self.apply_key_event)
+
+        self.fix_line_settings_array.setFocus()
 
         self.thread_warper = UHeightmapGenerationWarperThread()
+
+    def delete_key_event(self):
+        self.availible_parce_lines_array.key_delete_setting()
+        self.fix_line_settings_array.key_delete_setting()
+
+    def apply_key_event(self):
+        self.availible_parce_lines_array.apply_key_event()
+        self.fix_line_settings_array.apply_key_event()
+
 
     def updateProgress(self, value):
         # Обновляем значение прогресс-бара

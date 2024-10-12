@@ -52,13 +52,11 @@ class UArrayWidget(QWidget):
         delete_button.clicked.connect(self.delete_setting)
         button_layout.addWidget(delete_button)
 
-        self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
-        self.delete_shortcut.activated.connect(self.delete_setting)
-
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
         self.list_widget.currentRowChanged.connect(self.load_settings)
+
 
     def update_options(self):
         settings = self.settings_class()
@@ -109,30 +107,35 @@ class UArrayWidget(QWidget):
 
     def load_settings(self, current_row=-1):
         current_row = self.list_widget.currentRow()
-        settings = self.settings_list[current_row]
+        if(current_row>0 and len(self.settings_list)>current_row):
+            settings = self.settings_list[current_row]
+            for attr_name in settings.ui_show_tag:
+                if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
+                    value = getattr(settings, attr_name)
+                    find_setting = self.find_settings_by_name(attr_name)
+                    if find_setting:
+                        if isinstance(value, bool):
+                            find_setting.setChecked(value)
+                        elif (isinstance(value, str) and hasattr(settings, str(attr_name + "_options"))):
+                            options = getattr(settings, str(attr_name + "_options"))
+                            find_setting.clear()
+                            find_setting.addItems(options)
+                            if(value in options):
+                                find_setting.setCurrentIndex(options.index(value))
+                            else:
+                                find_setting.setCurrentIndex(options.index("ErrorType"))
+                        elif isinstance(value, int):
+                            find_setting.setValue(value)
+                        elif isinstance(value, float):
+                            find_setting.setValue(value)
+                        elif isinstance(value, str):  # Для строковых параметров
+                            find_setting.setText(value)
 
-        for attr_name in settings.ui_show_tag:
-            if not attr_name.startswith('__') and not callable(getattr(settings, attr_name)):
-                value = getattr(settings, attr_name)
-                find_setting = self.find_settings_by_name(attr_name)
-                if find_setting:
-                    if isinstance(value, bool):
-                        find_setting.setChecked(value)
-                    elif (isinstance(value, str) and hasattr(settings, str(attr_name + "_options"))):
-                        options = getattr(settings, str(attr_name + "_options"))
-                        find_setting.clear()
-                        find_setting.addItems(options)
-                        if(value in options):
-                            find_setting.setCurrentIndex(options.index(value))
-                        else:
-                            find_setting.setCurrentIndex(options.index("ErrorType"))
-                    elif isinstance(value, int):
-                        find_setting.setValue(value)
-                    elif isinstance(value, float):
-                        find_setting.setValue(value)
-                    elif isinstance(value, str):  # Для строковых параметров
-                        find_setting.setText(value)
-
+    def check_parametrs_focus(self):
+        for child in self.param_widgets:
+            if child[1].hasFocus():
+                return True
+        return False
 
     def create_new_setting(self, new_setting):
         # Создаем кастомный виджет для отображения в ListWidget
@@ -160,7 +163,6 @@ class UArrayWidget(QWidget):
         self.settings_list.append(new_setting)
         self.edit_setting(new_setting)
         self.clear_inputs()
-
 
     def update_settings(self, settings=None):
         # Если settings не переданы, используем текущий выбранный элемент
@@ -229,8 +231,22 @@ class UArrayWidget(QWidget):
         self.list_widget.takeItem(current_row)
         self.clear_inputs()  # Очистка полей ввода после удаления
 
+    def key_delete_setting(self):
+        if(self.list_widget.hasFocus()):
+            self.delete_setting()
+
+
     def clear_inputs(self):
         pass
+
+    def apply_key_event(self):
+        if(self.check_parametrs_focus()):
+            current_row = self.list_widget.currentRow()
+            if current_row >= 0:
+                self.edit_setting()
+            else:
+                self.add_setting()
+
 
     def create_spinbox(self, layout, attr_name, value):
         spin_box = QSpinBox()
