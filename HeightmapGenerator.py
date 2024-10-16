@@ -11,6 +11,7 @@ import Delegates
 import math
 from scipy.spatial import ConvexHull
 from playsound import playsound
+import xml.etree.ElementTree as ET
 
 def set_options_to_availible_parce_line_settings(new_options):
     for default_option in UAvailibleParceLineSettings.default_options:
@@ -58,6 +59,7 @@ class UAvailibleParceLineSettings:
             if k in self.save_tag:
                 setattr(self, k, v)
 
+
 class UFixingLinesSettings:
     counter = -1
 
@@ -101,7 +103,7 @@ class UFixingLinesSettings:
 class UHeightMapGenerator:
     def __init__(self):
         # 1. Параметры ввода/вывода
-        self.__bna_file_path = "None"  # Путь к файлу BNA
+        self.__file_path = "None"  # Путь к файлу BNA
 
         # 2. Параметры размера и границ
         self.global_scale_multiplier = 0.2  # Глобальный масштаб
@@ -120,7 +122,8 @@ class UHeightMapGenerator:
         self.cook_image = None  # Изображение для отладки или вывода
 
         # 4. Параметры обработки линий
-        self.availible_parce_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
+        self.availible_parce_contour_line_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
+        self.availible_parce_slope_line_setting = "Slope line, contour"
 
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
@@ -135,12 +138,12 @@ class UHeightMapGenerator:
         self.end_cook_delegate = Delegates.UDelegate()  # Делегат для завершея
         self.progress_delegate = Delegates.UDelegate()
 
-        self.save_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
+        self.save_tag = ['file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'remove_all_error_lines','min_owner_overlap']
-        self.ui_show_tag = ['bna_file_path', 'global_scale_multiplier', 'first_level_distance',
+                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting']
+        self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                            'remove_all_error_lines','min_owner_overlap']
+                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting']
 
 
 
@@ -166,23 +169,23 @@ class UHeightMapGenerator:
                     self.fixing_lines_settings.append(new_fixing_lines_setting)
             elif k == 'availible_parce_settings':
                 # Десериализация списка availible_parce_settings
-                self.availible_parce_settings.clear()
+                self.availible_parce_contour_line_settings.clear()
                 for item in v:
                     new_availible_parce_line_setting = UAvailibleParceLineSettings()
                     new_availible_parce_line_setting.from_dict(item)
-                    self.availible_parce_settings.append(new_availible_parce_line_setting)
+                    self.availible_parce_contour_line_settings.append(new_availible_parce_line_setting)
                     print(new_availible_parce_line_setting)
 
     @property
-    def bna_file_path(self):
+    def file_path(self):
         # Геттер для переменной value
-        return self.__bna_file_path
+        return self.__file_path
 
-    @bna_file_path.setter
-    def bna_file_path(self, bna_file_path):
+    @file_path.setter
+    def file_path(self, file_path):
         # Сеттер, который будет вызван при присвоении значения
-        self.__bna_file_path = bna_file_path
-        self.UpdateAvailibleParceLineOptions(helper_functions.ReadFile(self.__bna_file_path))
+        self.__file_path = file_path
+        self.UpdateAvailibleParceLineOptions(helper_functions.ReadFile(self.__file_path))
 
     def find_availible_parce_setting_by_name(self, name):
         for availible_parce_setting in self.availible_parce_settings:
@@ -200,32 +203,64 @@ class UHeightMapGenerator:
                 if(not points[0] in options):
                     options.append(points[0])
         set_options_to_availible_parce_line_settings(options)
-        for option in self.availible_parce_settings:
+        for option in self.availible_parce_contour_line_settings:
             if(option):
                 option.update_options_by_global_options()
 
-    def ParseAllFromData(self, data):
+
+    # Основная функция для парсинга XML-файла
+    def parse_omap_hml(self):
+        tree = ET.parse(self.file_path)
+        root = tree.getroot()
+
+        namespace = helper_functions.get_namespace(root)
+
         lines = []
-        current_line = []
-        for line in data.splitlines():
-            stripped_line = line.strip()
-            points = stripped_line.split(',')
+        slope_lines = []
 
-            if not helper_functions.can_convert_to_float(points[0]):
-                if current_line:
-                    lines.append(current_line)
-                    current_line = []
-            else:
+        symbols_lines = {}
+        for available_parce_contour_line in self.availible_parce_contour_line_settings:
+            symbols_lines.update(helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
 
-                if len(points) == 2:
-                    x = float(points[0]) * self.global_scale_multiplier
-                    y = float(points[1]) * self.global_scale_multiplier
-                    current_line.append([x, y])
+        for obj in root.findall(f'.//{namespace}object'):
+            symbol_id = obj.get('symbol')
+            if symbol_id in symbols_lines:
+                coords = obj.find(f'{namespace}coords').text.strip()
+                coords = coords.split(";")  # Сначала разделяем по ";"
+                coords = [coord.split(" ") for coord in coords]
+                coords = helper_functions.fix_coordinates(coords)
+                coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
+                lines.append([coords_list])
 
-        if current_line:
-            lines.append(current_line)
+        symbols_slope_lines = {}
+        symbols_slope_lines.update(helper_functions.extract_symbols(root, self.availible_parce_slope_line_setting, namespace))
 
-        return lines
+        for obj in root.findall(f'.//{namespace}object'):
+            symbol_id = obj.get('symbol')
+            if symbol_id in symbols_slope_lines:
+                rotation = obj.get('rotation')
+                coords = obj.find(f'{namespace}coords').text.strip()
+                coords = coords.split(";")  # Сначала разделяем по ";"
+                coords = helper_functions.fix_coordinates(coords)
+                coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
+                slope_lines.append([coords_list, rotation])
+
+        return lines, slope_lines
+
+    def ImportNewFile(self):
+        file_extension = self.file_path.split('.')[-1]
+        if file_extension == "omap":
+            data_lines, data_slope_lines = self.parse_omap_hml()
+            return data_lines, data_slope_lines
+        elif file_extension == "bna":
+            data = helper_functions.ReadFile(self.bna_file_path)
+            data_lines = self.ParseAllFromData(data)
+            return data_lines, None
+        elif file_extension == "ocd":
+            return None, None
+        else:
+            print("Неизвестный тип файла")
+            return None, None
 
     def ParseLinesFromData(self, data):
         lines = []
@@ -252,6 +287,30 @@ class UHeightMapGenerator:
 
         if current_line:
             lines.append(current_line)
+
+        return lines
+
+    def ParseAllFromData(self, data):
+        lines = []
+        current_line = []
+        for line in data.splitlines():
+            stripped_line = line.strip()
+            points = stripped_line.split(',')
+            if not helper_functions.can_convert_to_float(points[0]):
+                if current_line:
+                    lines.append(current_line)
+                    current_line = []
+            else:
+
+                if len(points) == 2:
+                    x = float(points[0]) * self.global_scale_multiplier
+                    y = float(points[1]) * self.global_scale_multiplier
+                    current_line.append([x, y])
+
+        if current_line:
+            lines.append(current_line)
+
+        lines = self.ParseLinesFromData(lines)
 
         return lines
 
@@ -542,17 +601,27 @@ class UHeightMapGenerator:
         """
         return [G.nodes[i]['coord'] for i in path]
 
-    def GenerateLinesByLineData(self,lines_data):
+    def GenerateLinesByLineData(self,lines_data, slope_lines_data):
         lines_coords = []
         for line_data in lines_data:
             updated_coords = []
-            for coord in line_data:
+            for coord in line_data[0]:
                 x = coord[0]
                 y = coord[1]
                 updated_coords.append([x,y])
             lines_coords.append(updated_coords)
+
+        slope_lines_coords = []
+        for slope_line_data in slope_lines_data:
+            updated_coords = []
+            for coord in slope_line_data[0]:
+                x = coord[0]
+                y = coord[1]
+                updated_coords.append([x,y])
+            slope_lines_coords.append(updated_coords)
+
         self.SetupSizeDataFromLines(lines_coords)
-        return self.GeneratedLineByCoords(lines_coords)
+        return self.GeneratedLineByCoords(lines_coords, slope_lines_coords)
 
     def FixMergeNearLines(self, setting:UFixingLinesSettings):
         if(setting.apply_merge_line_value):
@@ -653,7 +722,7 @@ class UHeightMapGenerator:
                             line.points =  line_to_merge.points[::-1] + line.points
                             line.start_points = line_to_merge.start_points[::-1] + line.start_points
                         elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
-                            line.points = line.points + line_to_merge.points[::-1]
+                            line.points = line_to_merge.points + line.points
                             line.start_points = line.start_points + line_to_merge.start_points[::-1]
                         elif optimal_start_point_to_merge_index == (len(
                                 line.points) - 1) and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
@@ -728,8 +797,6 @@ class UHeightMapGenerator:
             min_parent_area = 1000000000
             min_parent = None
             for uncheck_line in uncheck_lines:
-                try:
-                    print(check_line.evaluate_polygon_overlap(uncheck_line))
                     if (check_line.evaluate_polygon_overlap(uncheck_line)>self.min_owner_overlap):
                         if check_line.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             last_parent = uncheck_line.parent
@@ -744,12 +811,9 @@ class UHeightMapGenerator:
                             uncheck_line.parent = check_line
                             check_line.childs.append(uncheck_line)
                     else:
-                        print(uncheck_line.evaluate_polygon_overlap(check_line))
                         if (uncheck_line.shapely_polygon and uncheck_line.evaluate_polygon_overlap(check_line)>self.min_owner_overlap and min_parent_area > uncheck_line.shapely_polygon.area):
                             min_parent = uncheck_line
                             min_parent_area = uncheck_line.shapely_polygon.area
-                except:
-                    print("Fatal Wrong Poligon" + str(check_line) + "or" + str(uncheck_line))
             if (min_parent):
                 last_parent = check_line.parent
                 check_line.parent = min_parent
@@ -773,7 +837,10 @@ class UHeightMapGenerator:
         for error_line in error_lines:
             self.lines.remove(error_line)
 
-    def GeneratedLineByCoords(self, lines_coords):
+    def GeneratedSlopeDirectionEvent(self, slope_lines_coords):
+        pass
+
+    def GeneratedLineByCoords(self, lines_coords, slope_lines_coords):
         self.lines = []
 
         for line in lines_coords:
@@ -801,22 +868,22 @@ class UHeightMapGenerator:
             self.RemoveAllErrorLines()
 
 
-    def DrawPlotHeightMap(self, lines):
-        max_depth = line_library.GetMaxDepthFromLines(lines)
+    def DrawPlotHeightMap(self):
+        max_depth = line_library.GetMaxDepthFromLines(self.lines)
         print("Depth equal " + str(max_depth))
         image = Image.new("RGB", (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)), "black")
         draw = ImageDraw.Draw(image)
-        root_lines = line_library.GetRootLines(lines)
+        root_lines = line_library.GetRootLines(self.lines)
 
         k = 0
         for y in range(int(self.height + self.first_level_distance)):
             for x in range(int(self.width + self.first_level_distance)):
                 helper_functions.print_progress_bar(k,int(self.height)*int(self.width))
-                point = Point(int(x+self.min_width - self.first_level_distance/2 ), int(y+self.min_height - self.first_level_distance/2))
+                point = Point(int(x+self.min_width - self.first_level_distance/2), int(y+self.min_height - self.first_level_distance/2))
                 intensity = 0
                 owner_line = None
                 min_poligin_length = 100000000000000
-                for line in lines:
+                for line in self.lines:
                     if line.shapely_polygon.contains(point):
                         intensity += 1
                         if(min_poligin_length>line.shapely_polygon.length):
@@ -856,20 +923,13 @@ class UHeightMapGenerator:
         return image
 
     def MainLaunchOperations(self):
-        if(os.path.exists(self.bna_file_path)):
-            data = helper_functions.ReadFile(self.bna_file_path)
+        if(os.path.exists(self.file_path)):
+            contour_lines, slope_lines = self.ImportNewFile()
+            self.GenerateLinesByLineData(contour_lines, slope_lines)
             if (self.draw_debug_lines):
-                data_all = self.ParseAllFromData(data)
-                data_lines = self.ParseLinesFromData(data)
-                self.GenerateLinesByLineData(data_lines)
-                print(self.width, self.height)
                 self.DebugDrawLines(self.lines)
                 self.end_cook_delegate.invoke()
             else:
-                data_all = self.ParseAllFromData(data)
-                data_lines = self.ParseLinesFromData(data)
-                self.lines = self.GenerateLinesByLineData(data_lines)
-                print(self.width, self.height)
-                self.DrawPlotHeightMap(self.lines)
+                self.DrawPlotHeightMap()
                 self.end_cook_delegate.invoke()
 

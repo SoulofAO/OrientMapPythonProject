@@ -110,6 +110,9 @@ class ULine:
         outer_polygon = Polygon(t_new)  # Внешний полигон
         inner_polygon = Polygon(t1_new)
 
+        outer_polygon = outer_polygon.buffer(0)
+        inner_polygon = inner_polygon.buffer(0)
+
         inner_area = inner_polygon.area
         intersection_area = outer_polygon.intersection(inner_polygon).area
 
@@ -120,6 +123,10 @@ class ULine:
 
 def GetMaxDepthFromLines(lines):
     max_depth = -1
+    if(lines==None):
+        return -1.0
+    if(len(lines)==0):
+        return -1.0
     for line in lines:
         depth = line.GetMaxDepth()
         if(max_depth<depth):

@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout, QCheckBox,
-    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar, QShortcut
+    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar, QShortcut, QLineEdit
 )
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QImage, QPixmap
@@ -113,7 +113,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         right_layout.addWidget(availible_parce_lines_text_label)
         availible_parce_lines_text_label.setAlignment(Qt.AlignCenter)
 
-        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_settings)
+        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_contour_line_settings)
         right_layout.addWidget(self.availible_parce_lines_array)
 
         right_layout.addWidget(scroll_area)
@@ -157,8 +157,8 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.progress.setValue(value)
 
     def UpdateLoadedStatusText(self):
-        if(self.settings.bna_file_path):
-            if(os.path.exists(self.settings.bna_file_path)):
+        if(self.settings.file_path):
+            if(os.path.exists(self.settings.file_path)):
                 self.loaded_status_text.setText("Loaded")
                 return
         self.loaded_status_text.setText("Not Loaded")
@@ -181,6 +181,8 @@ class UHeightmapGeneratorUI(QMainWindow):
                 self.create_spinbox(layout, attr_name, value)
             elif isinstance(value, float):
                 self.create_double_spinbox(layout, attr_name, value)
+            elif isinstance(value, str):  # Для строковых параметров
+                lineedit = self.create_lineedit(layout, attr_name, value)
 
 
 
@@ -237,6 +239,13 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.param_widgets.append([attr_name, combobox_directions])
         layout.addRow(attr_name, combobox_directions)
 
+    def create_lineedit(self, layout, attr_name, value):
+        """Создание текстового поля для строковых параметров."""
+        line_edit = QLineEdit()
+        line_edit.setText(value)  # Устанавливаем начальное значение
+        self.param_widgets.append([attr_name, line_edit])
+        layout.addRow(attr_name, line_edit)
+
     def FindParamWidgetByName(self, attr_name):
         for param_widget in self.param_widgets:
             if param_widget[0] == attr_name:
@@ -247,7 +256,7 @@ class UHeightmapGeneratorUI(QMainWindow):
     def on_load_file(self):
         path_file, data = helper_functions.ChooseFile()
         if (path_file):
-            self.settings.bna_file_path = path_file
+            self.settings.file_path = path_file
             self.ApplyAllVariableAndSave()
         else:
             print("Warning: No selected File")
@@ -270,6 +279,8 @@ class UHeightmapGeneratorUI(QMainWindow):
                     setattr(self.settings, attr_name, widget.value())
                 elif isinstance(widget, QCheckBox):
                     setattr(self.settings, attr_name, widget.isChecked())
+                elif isinstance(widget, QLineEdit):  # Для строковых параметров
+                    setattr(self.settings, attr_name, widget.text())
                 elif isinstance(widget, QComboBox):
                     setattr(self.settings, attr_name, widget.currentText())
         self.settings.availible_parce_settings = self.availible_parce_lines_array.settings_list
@@ -291,7 +302,7 @@ class UHeightmapGeneratorUI(QMainWindow):
 
     def on_apply(self):
         self.ApplyAllVariableAndSave()
-        if(self.settings.bna_file_path and os.path.exists(self.settings.bna_file_path)):
+        if(self.settings.file_path and os.path.exists(self.settings.file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
             self.settings.end_cook_delegate.add(self.on_image_cooked)
             self.thread_warper.set_heightmap_generator(self.settings)

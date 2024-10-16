@@ -96,8 +96,7 @@ class UArrayWidget(QWidget):
                 elif isinstance(value, float):
                     self.create_double_spinbox(layout, attr_name, value)
                 elif isinstance(value, str):  # Для строковых параметров
-                    self.create_lineedit(layout, attr_name, value)
-
+                    lineedit = self.create_lineedit(layout, attr_name, value)
 
     def find_settings_by_name(self, attr_name):
         for param_widget in self.param_widgets:

@@ -1,16 +1,53 @@
 {
-    "bna_file_path": "C:/Users/sgsgg/Downloads/TestMapBrokeLineV10.bna",
-    "global_scale_multiplier": 0.2,
+    "file_path": "C:/Users/sgsgg/Downloads/TestOMPV1.omap",
+    "global_scale_multiplier": 0.25,
     "first_level_distance": 50,
-    "max_distance_to_border_polygon": 100,
+    "max_distance_to_border_polygon": 50,
     "draw_with_max_border_polygon": true,
     "remove_all_error_lines": false,
     "min_owner_overlap": 0.95,
+    "availible_parce_slope_line_setting": "Slope line, contour",
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 10000,
-            "border_distance": 5,
+            "max_merge_line_value": 10,
+            "border_distance": -10,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 20,
+            "border_distance": 10,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 1000,
+            "border_distance": 0,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 1000,
+            "border_distance": 30,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 1000,
+            "border_distance": 70,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
