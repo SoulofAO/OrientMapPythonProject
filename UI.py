@@ -15,6 +15,7 @@ import line
 from PyQt5.QtGui import QColor
 import UIModulate
 from playsound import playsound
+from Delegates import UDelegate
 
 class UHeightmapGenerationWarperThread(QThread):
     def __init__(self):
@@ -66,7 +67,7 @@ class UHeightmapGeneratorUI(QMainWindow):
 
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setGeometry(30, 40, 300, 25)  # Размер и положение прогресс-бара
-        self.progress_bar.setMaximum(100)  # Устанавливаем максимальное значение
+        self.progress_bar.setMaximum(101)  # Устанавливаем максимальное значение
         progress_layout.addWidget(self.progress_bar)
 
         left_layout.addLayout(progress_layout)
@@ -75,8 +76,6 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.tree_lines.setColumnCount(1)  # Указываем количество колонок
         self.tree_lines.setHeaderLabels(["Items"])  # Название колонки
         left_layout.addWidget(self.tree_lines)
-
-
 
         self.load_button = QPushButton("Load File")
         self.reset_button = QPushButton("Reset Data")
@@ -152,9 +151,11 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.fix_line_settings_array.apply_key_event()
 
 
-    def updateProgress(self, value):
-        # Обновляем значение прогресс-бара
-        self.progress.setValue(value)
+    def updateProgress(self, text, value):
+        self.progress_text.setText(text)
+        value = int(value*100)
+        if(self.progress_bar):
+            self.progress_bar.setValue(value)
 
     def UpdateLoadedStatusText(self):
         if(self.settings.file_path):
@@ -305,6 +306,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         if(self.settings.file_path and os.path.exists(self.settings.file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
             self.settings.end_cook_delegate.add(self.on_image_cooked)
+            self.settings.progress_delegate.add(self.updateProgress)
             self.thread_warper.set_heightmap_generator(self.settings)
             self.thread_warper.start()
 

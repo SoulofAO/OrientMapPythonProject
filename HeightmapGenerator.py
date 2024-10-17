@@ -13,6 +13,9 @@ from scipy.spatial import ConvexHull
 from playsound import playsound
 import xml.etree.ElementTree as ET
 
+def clamp(value, min_value, max_value):
+    return max(min_value, min(value, max_value))
+
 def set_options_to_availible_parce_line_settings(new_options):
     for default_option in UAvailibleParceLineSettings.default_options:
         if (not default_option in new_options):
@@ -210,10 +213,10 @@ class UHeightMapGenerator:
                 symbols_lines.update(
                     helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
 
-            for symbol in symbols_lines:
+            for symbol in symbols_lines.keys():
                 print(symbol)
                 if (not symbol in options):
-                    options.append(symbol)
+                    options.append(symbols_lines.get(symbol))
             set_options_to_availible_parce_line_settings(options)
             for option in self.availible_parce_contour_line_settings:
                 if (option):
@@ -903,14 +906,17 @@ class UHeightMapGenerator:
 
         self.SetupBorderPoligonsDataFromLines(-2)
 
-        self.progress_delegate.invoke("fixing_lines_settings", -1)
+        k = 0
         for setting in self.fixing_lines_settings:
+            self.progress_delegate.invoke("fixing_lines_settings FixMergeNearLines : index = " + str(k), 0.5)
             self.FixMergeNearLines(setting)
             if(setting.regenerate_borders):
                 self.SetupBorderPoligonsDataFromLines(setting.border_distance)
+            self.progress_delegate.invoke("fixing_lines_settings FixUnboarderLines : index = " + str(k), 1.0)
             self.FixUnboarderLines(setting)
+            k = k + 1
 
-        self.progress_delegate.invoke("generated_neasting_of_lines", -1)
+        self.progress_delegate.invoke("generated_neasting_of_lines", 0)
         for line in self.lines:
             line.CreatePoligon()
         self.GeneratedNestingOfLines()
@@ -923,16 +929,16 @@ class UHeightMapGenerator:
 
 
     def DrawPlotHeightMap(self):
-        min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(self.lines)
+        root_lines = line_library.GetRootLines(self.lines)
+        min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(root_lines)
         print("Depth equal " + str(max_depth-min_depth))
         image = Image.new("RGB", (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)), "black")
         draw = ImageDraw.Draw(image)
-        root_lines = line_library.GetRootLines(self.lines)
 
         k = 0
         for y in range(int(self.height + self.first_level_distance)):
             for x in range(int(self.width + self.first_level_distance)):
-                helper_functions.print_progress_bar(k,int(self.height)*int(self.width))
+                helper_functions.print_progress_bar(k,int(self.height + self.first_level_distance)*int(self.width + self.first_level_distance))
                 point = Point(int(x+self.min_width - self.first_level_distance/2), int(y+self.min_height - self.first_level_distance/2))
                 intensity = -min_depth
                 owner_line = None
@@ -950,42 +956,57 @@ class UHeightMapGenerator:
                             owner_line = line
                 if owner_line:
                     distance_to_owner_poligon = point.distance(owner_line.shapely_polygon.exterior)
-                    min_distance_to_child_poligon = 100000000000000
-                    child_line = None
+                    sum_distance = 0
                     for child in owner_line.childs:
-                        if min_distance_to_child_poligon> point.distance(child.shapely_polygon.exterior):
-                            min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                            child_line = child
-                    distance_to_child_poligon = min_distance_to_child_poligon
-                    if child_line:
-                        normalize_distance_to_child_poligon = distance_to_child_poligon/(distance_to_child_poligon+ distance_to_owner_poligon )
-                        normalize_distance_to_owner_poligon = distance_to_owner_poligon / (
-                                    distance_to_child_poligon + distance_to_owner_poligon)
-                        if (child_line.slope_direction == "Outside"):
-                            normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
-                        elif (child_line.slope_direction == "Inside"):
-                            normalize_distance_to_child_poligon = -1*normalize_distance_to_child_poligon
+                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                        if(min_distance_to_child_poligon<self.first_level_distance):
+                            sum_distance += min_distance_to_child_poligon
+                    intensity_sum = 0.0
+                    percent_owner_control = clamp(1 - distance_to_owner_poligon/self.first_level_distance,0,1)
+
+                    if(distance_to_owner_poligon<self.first_level_distance):
+                        percent = distance_to_owner_poligon/self.first_level_distance
+                        if (owner_line.slope_direction == "Outside"):
+                            intensity_sum +=  distance_to_owner_poligon/self.first_level_distance *percent_owner_control
+                        elif (owner_line.slope_direction == "Inside"):
+                            intensity_sum -=  distance_to_owner_poligon/self.first_level_distance*percent_owner_control
                         else:
-                            normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
-                        intensity +=1-normalize_distance_to_child_poligon
+                            intensity_sum += distance_to_owner_poligon/self.first_level_distance*percent_owner_control
 
+                    for child in owner_line.childs:
+                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                        if (min_distance_to_child_poligon < self.first_level_distance):
+                            normalize_distance_to_child_poligon = clamp(
+                                min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
+                                (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
+                            if (child.slope_direction == "Outside"):
+                                intensity_sum += normalize_distance_to_child_poligon
+                            elif (child.slope_direction == "Inside"):
+                                intensity_sum -= normalize_distance_to_child_poligon
+                            else:
+                                intensity_sum += normalize_distance_to_child_poligon
+
+                    intensity = intensity + intensity_sum
                 else:
-                    min_distance_to_child_poligon = 100000000000000
-                    child_line = None
+                    sum_distance = 0
                     for child in root_lines:
-                        if min_distance_to_child_poligon> point.distance(child.shapely_polygon.exterior):
-                            min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                            child_line = child
-                    distance_to_child_poligon = min_distance_to_child_poligon
+                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                        if (min_distance_to_child_poligon < self.first_level_distance):
+                            sum_distance += min_distance_to_child_poligon
+                    intensity_sum = 0.0
 
-                    normalize_distance_to_child_poligon = distance_to_child_poligon/(distance_to_child_poligon+ self.first_level_distance)
-                    if (child_line.slope_direction == "Outside"):
-                        normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
-                    elif (child_line.slope_direction == "Inside"):
-                        normalize_distance_to_child_poligon = -1*normalize_distance_to_child_poligon
-                    else:
-                        normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
-                    intensity = 1-normalize_distance_to_child_poligon/2
+                    for child in root_lines:
+                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                        if (min_distance_to_child_poligon < self.first_level_distance):
+                            normalize_distance_to_child_poligon = clamp(
+                                min_distance_to_child_poligon / sum_distance, 0, 1)*clamp((1-min_distance_to_child_poligon/self.first_level_distance),0,1)
+                            if (child.slope_direction == "Outside"):
+                                intensity_sum += normalize_distance_to_child_poligon
+                            elif (child.slope_direction == "Inside"):
+                                intensity_sum -= normalize_distance_to_child_poligon
+                            else:
+                                intensity_sum += normalize_distance_to_child_poligon
+                    intensity = intensity + intensity_sum
 
                 white_intensity = min(255, int(intensity * 255/(max_depth-min_depth)))
                 draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))

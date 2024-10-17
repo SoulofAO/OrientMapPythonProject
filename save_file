@@ -1,12 +1,12 @@
 {
-    "file_path": "C:/Users/sgsgg/Downloads/TestOMPV3.omap",
+    "file_path": "C:/Users/sgsgg/Downloads/TestOMP.omap",
     "global_scale_multiplier": 0.15,
-    "first_level_distance": 50,
+    "first_level_distance": 20,
     "max_distance_to_border_polygon": 50,
     "draw_with_max_border_polygon": true,
     "remove_all_error_lines": false,
     "min_owner_overlap": 0.8,
-    "availible_parce_slope_line_setting": "Slope line, contour",
+    "availible_parce_slope_line_setting": "Slope line",
     "draw_with_slope_line_color": true,
     "fixing_lines_settings": [
         {
