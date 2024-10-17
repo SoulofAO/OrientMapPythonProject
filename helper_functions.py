@@ -42,7 +42,7 @@ def ChooseFile():
     root.withdraw()
 
     file_path = filedialog.askopenfilename(title="Выберите файл OMAP, OCD, BNA",
-                                               filetypes=[("BNA files", "*.bna"), ("OMAP files", "*.omap"),("OCD files", "*.ocd"), ("All files", "*.*")])
+                                               filetypes=[("OMAP files", "*.omap"), ("BNA files", "*.bna"), ("OCD files", "*.ocd"), ("All files", "*.*")])
 
     if file_path:
         print(f"Выбранный файл: {file_path}")
@@ -88,12 +88,13 @@ def fix_coordinates(coordinates):
     if not coordinates:
         return []
 
-    # Проверяем последний элемент
     last_element = coordinates[-1]
 
-     # Проверяем, что последний элемент является списком из двух элементов
     if not (isinstance(last_element, list) and len(last_element) == 2):
-        # Убираем последний элемент, если он неверный
         coordinates = coordinates[:-1]
+
+    last_element = coordinates[-1]
+    if not (isinstance(last_element, list) and len(last_element) == 2):
+        coordinates[len(coordinates) - 1].pop(len(coordinates[len(coordinates) - 1])-1)
 
     return coordinates

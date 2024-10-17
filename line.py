@@ -13,7 +13,9 @@ class ULine:
         self.color = []
         self.correct_line = True;
         self.power = 1.0
+        self.slope_direction = "None" #None, Inside, Outside
         self.GenerateColorByLines()
+
 
 
     def GenerateColorByLines(self):
@@ -61,6 +63,29 @@ class ULine:
             return max_depth
         else:
             return depth
+
+    def GetMinAndMaxSlopeDirectionDepthByLine(self, depth=1):
+        if len(self.childs) > 0:
+            max_depth = -1
+            min_depth = 1000000
+            for child in self.childs:
+                if self.slope_direction == "Outside":
+                    new_depth = depth + 1
+                elif self.slope_direction == "Inside":
+                    new_depth = depth - 1
+                else:
+                    new_depth = depth + 1
+
+                l_min_depth, l_max_depth = child.GetMinAndMaxSlopeDirectionDepthByLine(new_depth)
+
+                if l_min_depth < min_depth:
+                    min_depth = l_min_depth
+                if l_max_depth > max_depth:
+                    max_depth = l_max_depth
+            return min_depth, max_depth
+        else:
+
+            return depth, depth
 
     def MergeСlosePoints(self, threshold):
         merged_line = []
@@ -119,6 +144,25 @@ class ULine:
         if inner_area == 0:
             return 0
         return intersection_area / inner_area
+
+
+def GetMinAndMaxSlopeDirectionDepthByLines(lines):
+    max_depth = -1
+    min_depth = 1000000000
+    if(lines==None):
+        return -1
+    if(len(lines)==0):
+        return -1
+    for line in lines:
+        l_min_depth, l_max_depth = line.GetMinAndMaxSlopeDirectionDepthByLine()
+        if(max_depth < l_max_depth):
+            max_depth = l_max_depth
+        if(min_depth > l_min_depth):
+            min_depth = l_min_depth
+    if(min_depth>0):
+        return 0, max_depth
+    else:
+        return min_depth, max_depth
 
 
 def GetMaxDepthFromLines(lines):

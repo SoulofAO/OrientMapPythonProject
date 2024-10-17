@@ -118,6 +118,7 @@ class UHeightMapGenerator:
 
         # 3. Параметры визуализации и отладки
         self.draw_with_max_border_polygon = True  # Рисовать с максимальной границей полигона
+        self.draw_with_slope_line_color = True # Рисовать с цветом возрастания или убывания.
         self.draw_debug_lines = True  # Режим отладки: отображение отладочных линий
         self.cook_image = None  # Изображение для отладки или вывода
 
@@ -140,10 +141,10 @@ class UHeightMapGenerator:
 
         self.save_tag = ['file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting']
+                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting']
+                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color']
 
 
 
@@ -185,7 +186,7 @@ class UHeightMapGenerator:
     def file_path(self, file_path):
         # Сеттер, который будет вызван при присвоении значения
         self.__file_path = file_path
-        self.UpdateAvailibleParceLineOptions(helper_functions.ReadFile(self.__file_path))
+        self.UpdateAvailibleParceLineOptions()
 
     def find_availible_parce_setting_by_name(self, name):
         for availible_parce_setting in self.availible_parce_settings:
@@ -193,19 +194,50 @@ class UHeightMapGenerator:
                 return availible_parce_setting
         return None
 
-    def UpdateAvailibleParceLineOptions(self, data):
+    def UpdateAvailibleParceLineOptions(self):
+        file_extension = self.file_path.split('.')[-1]
         options = []
-        for line in data.splitlines():
-            stripped_line = line.strip()
-            points = stripped_line.split(',')
-            if not helper_functions.can_convert_to_float(points[0]):
-                points[0] = points[0].strip('"').strip()
-                if(not points[0] in options):
-                    options.append(points[0])
-        set_options_to_availible_parce_line_settings(options)
-        for option in self.availible_parce_contour_line_settings:
-            if(option):
-                option.update_options_by_global_options()
+        if file_extension == "omap":
+
+            tree = ET.parse(self.file_path)
+            root = tree.getroot()
+
+            namespace = helper_functions.get_namespace(root)
+
+            symbols_lines = {}
+
+            for available_parce_contour_line in self.availible_parce_contour_line_settings:
+                symbols_lines.update(
+                    helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
+
+            for symbol in symbols_lines:
+                print(symbol)
+                if (not symbol in options):
+                    options.append(symbol)
+            set_options_to_availible_parce_line_settings(options)
+            for option in self.availible_parce_contour_line_settings:
+                if (option):
+                    option.update_options_by_global_options()
+
+
+        elif file_extension == "bna":
+            data = helper_functions.ReadFile(self.__file_path)
+            for line in data.splitlines():
+                stripped_line = line.strip()
+                points = stripped_line.split(',')
+                if not helper_functions.can_convert_to_float(points[0]):
+                    points[0] = points[0].strip('"').strip()
+                    if (not points[0] in options):
+                        options.append(points[0])
+            set_options_to_availible_parce_line_settings(options)
+            for option in self.availible_parce_contour_line_settings:
+                if (option):
+                    option.update_options_by_global_options()
+        elif file_extension == "ocd":
+            pass
+        else:
+            print("Неизвестный тип файла")
+            pass
 
 
     # Основная функция для парсинга XML-файла
@@ -241,9 +273,10 @@ class UHeightMapGenerator:
                 rotation = obj.get('rotation')
                 coords = obj.find(f'{namespace}coords').text.strip()
                 coords = coords.split(";")  # Сначала разделяем по ";"
+                coords = [coord.split(" ") for coord in coords]
                 coords = helper_functions.fix_coordinates(coords)
                 coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
-                slope_lines.append([coords_list, rotation])
+                slope_lines.append([coords_list, float(rotation)])
 
         return lines, slope_lines
 
@@ -253,7 +286,7 @@ class UHeightMapGenerator:
             data_lines, data_slope_lines = self.parse_omap_hml()
             return data_lines, data_slope_lines
         elif file_extension == "bna":
-            data = helper_functions.ReadFile(self.bna_file_path)
+            data = helper_functions.ReadFile(self.file_path)
             data_lines = self.ParseAllFromData(data)
             return data_lines, None
         elif file_extension == "ocd":
@@ -262,55 +295,28 @@ class UHeightMapGenerator:
             print("Неизвестный тип файла")
             return None, None
 
-    def ParseLinesFromData(self, data):
-        lines = []
-        current_line = []
-        correct_data = True;
-        for line in data.splitlines():
-            stripped_line = line.strip()
-            points = stripped_line.split(',')
-            if not helper_functions.can_convert_to_float(points[0]):
-                points[0] = points[0].strip('"').strip()
-                if self.find_availible_parce_setting_by_name(points[0]) !=None:
-                    correct_data = True;
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = []
-                else:
-                    correct_data = False
-            else:
-
-                if len(points) == 2 and correct_data:
-                    x = float(points[0]) * self.global_scale_multiplier
-                    y = float(points[1]) * self.global_scale_multiplier
-                    current_line.append([x, y])
-
-        if current_line:
-            lines.append(current_line)
-
-        return lines
-
     def ParseAllFromData(self, data):
         lines = []
         current_line = []
+        sucsess = False
         for line in data.splitlines():
             stripped_line = line.strip()
             points = stripped_line.split(',')
             if not helper_functions.can_convert_to_float(points[0]):
                 if current_line:
-                    lines.append(current_line)
+                    lines.append([current_line])
                     current_line = []
+                if not self.find_availible_parce_setting_by_name(points[0]):
+                    sucsess = True
             else:
 
-                if len(points) == 2:
+                if len(points) == 2 and sucsess:
                     x = float(points[0]) * self.global_scale_multiplier
                     y = float(points[1]) * self.global_scale_multiplier
                     current_line.append([x, y])
 
         if current_line:
-            lines.append(current_line)
-
-        lines = self.ParseLinesFromData(lines)
+            lines.append([current_line])
 
         return lines
 
@@ -330,9 +336,9 @@ class UHeightMapGenerator:
         if len(unique_points) < 3:
             # Если точек меньше 3 или они лежат на одной прямой, используем LineString и создаем буфер
             line = LineString(unique_points)
-            self.border_polygon = line.buffer(-1*border_distance, join_style=2,
+            self.border_polygon = line.buffer(-1 * border_distance * self.global_scale_multiplier, join_style=2,
                                               cap_style=2)  # cap_style=2 для плоских концов
-            self.max_border_polygon = line.buffer(self.max_distance_to_border_polygon, join_style=2, cap_style=2)
+            self.max_border_polygon = line.buffer(self.max_distance_to_border_polygon * self.global_scale_multiplier, join_style=2, cap_style=2)
 
         else:
             # Находим минимальные и максимальные координаты по x и y
@@ -392,81 +398,63 @@ class UHeightMapGenerator:
         self.width = self.max_width - self.min_width
         self.height = self.max_height - self.min_height
 
-    def DebugDrawLines(self,lines):
-        if(not self.draw_with_max_border_polygon):
+    def draw_polygon(self, draw, polygon, offset_x, offset_y, color, width=2):
+        x, y = polygon.exterior.xy
+        coords = [(int(x[i] + offset_x), int(y[i] + offset_y)) for i in range(len(x))]
+        draw.line(coords, fill=color, width=width)
+
+    def draw_lines(self, draw, lines, offset_x, offset_y):
+        for line in lines:
+            if len(line.points) >= 2:  # Проверяем, что есть как минимум две точки для рисования линии
+                flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
+                if(self.draw_with_slope_line_color):
+                    if line.slope_direction == "None":
+                        color = (255, 255, 255)  # Белый для None
+                    elif line.slope_direction == "Inside":
+                        color = (0, 255, 0)  # Зеленый для Inside
+                    elif line.slope_direction == "Outside":
+                        color = (255, 0, 0)  # Красный для Outside
+                    else:
+                        color = (0, 0, 255)
+                    draw.line(flat_coords, fill=color, width=2)
+                else:
+                    color = (line.color[0], line.color[1], line.color[2])
+                    draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]), width=2)
+
+    def DebugDrawLines(self, lines):
+        if(self.draw_with_max_border_polygon):
+            min_x, min_y, max_x, max_y = self.find_bounding_square(self.max_border_polygon)
+            width = int(max_x - min_x + 1)
+            height = int(max_y - min_y + 1)
+        else:
             min_x = self.min_width
             max_x = self.max_width
             min_y = self.min_height
             max_y = self.max_height
 
-            # Увеличиваем размеры изображения с учетом отрицательных координат
-            width = int(max_x - min_x + 1 )
-            height = int(max_y - min_y + 1)
-
-            # Создаем новое изображение с черным фоном
-            image = Image.new("RGB", (width, height), "black")
-            draw = ImageDraw.Draw(image)
-
-            # Смещение для корректного отображения отрицательных координат
-            offset_x = -min_x
-            offset_y = -min_y
-
-            for line in lines:
-                if len(line.line) >= 2:  # Проверяем, что есть как минимум две точки для рисования линии
-                    # Преобразуем массив координат в плоский список с учетом смещения и округляем до int
-                    flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.line]
-
-                    draw.line(flat_coords, fill=(line.color[0],line.color[1],line.color[2]), width=2)  # Рисуем линию с цветом из line.color
-
-            x, y = self.border_polygon.exterior.xy
-            border_coords = []
-            for length in range(len(x)):
-                border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
-            draw.line(border_coords, fill="red", width=2)
-            image.save("lines_image.png")
-            self.cook_image = image
-            image.show()
-        else:
-            min_x, min_y, max_x, max_y  = self.find_bounding_square(self.max_border_polygon)
             width = int(max_x - min_x + 1)
             height = int(max_y - min_y + 1)
-            image = Image.new("RGB", (width+1, height+1), "black")
-            draw = ImageDraw.Draw(image)
 
-            offset_x = -min_x
-            offset_y = -min_y
+        image = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(image)
 
-            x, y = self.border_polygon.exterior.xy
-            border_coords = []
+        offset_x = -min_x
+        offset_y = -min_y
 
-            for length in range(len(x)):
-                border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
-            draw.line(border_coords, fill="red", width=2)
+        self.draw_lines(draw, self.lines , offset_x, offset_y)
 
-            x, y = self.max_border_polygon.exterior.xy
-            max_border_coords = []
-            for length in range(len(x)):
-                max_border_coords.append((int(x[length] + offset_x), int(y[length] + offset_y)))
-            draw.line(max_border_coords, fill="green", width=2)
+        if self.draw_with_max_border_polygon:
+            self.draw_polygon(draw, self.border_polygon, offset_x, offset_y, "red")
 
-            for line in self.lines:
-                if(line.correct_line):
-                    if len(line.points) >= 2:
-                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
-                        draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]),
-                                  width=2)
-                else:
-                    if len(line.points) >= 2:
-                        flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
-                        for i in range(len(flat_coords)-1):
-                            self.draw_two_color_line(draw, flat_coords[i], flat_coords[i+1], 'red', 'white', width=2, step=10)
+            self.draw_polygon(draw, self.max_border_polygon, offset_x, offset_y, "green")
 
-            image.save("lines_image.png")
-            self.cook_image = image
-            return image
+        image.save("lines_image.png")
+        self.cook_image = image
 
-    def direction_point_from_border_polygon(self, border_polygon, point):
-        coords = list(border_polygon.exterior.coords)
+        return image
+
+    def direction_from_point_to_polygon(self, polygon, point):
+        coords = list(polygon.exterior.coords)
         point = Point(point)
         min_distance = float('inf')
         projection_point = None
@@ -612,13 +600,15 @@ class UHeightMapGenerator:
             lines_coords.append(updated_coords)
 
         slope_lines_coords = []
-        for slope_line_data in slope_lines_data:
-            updated_coords = []
-            for coord in slope_line_data[0]:
-                x = coord[0]
-                y = coord[1]
-                updated_coords.append([x,y])
-            slope_lines_coords.append(updated_coords)
+        if(slope_lines_data):
+            for slope_line_data in slope_lines_data:
+                updated_coords = []
+                for coord in slope_line_data[0]:
+                    x = coord[0]
+                    y = coord[1]
+                    updated_coords.append([x,y])
+                slope_lines_coords.append([updated_coords,slope_line_data[1]])
+        #Сегмент устарел. Нужен был из за часто возникающего бага в исходных данных.
 
         self.SetupSizeDataFromLines(lines_coords)
         return self.GeneratedLineByCoords(lines_coords, slope_lines_coords)
@@ -752,14 +742,14 @@ class UHeightMapGenerator:
                     if not self.border_polygon.contains(Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1])):
                         G = self.create_graph_from_polygon(self.max_border_polygon, setting.hight_find_direction)
 
-                        projection_point, closest_segment =self.direction_point_from_border_polygon(self.max_border_polygon, line.points[0])
+                        projection_point, closest_segment =self.direction_from_point_to_polygon(self.max_border_polygon, line.points[0])
                         x_coordinate_start = projection_point.x
                         y_coordinate_start = projection_point.y
                         line.points.insert(0, (x_coordinate_start, y_coordinate_start))
 
                         start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
 
-                        projection_point, closest_segment = self.direction_point_from_border_polygon(self.max_border_polygon, line.points[-1])
+                        projection_point, closest_segment = self.direction_from_point_to_polygon(self.max_border_polygon, line.points[-1])
                         x_coordinate_end = projection_point.x
                         y_coordinate_end = projection_point.y
                         line.points.append((x_coordinate_end, y_coordinate_end))
@@ -805,7 +795,7 @@ class UHeightMapGenerator:
                                 uncheck_line.parent = last_parent
                             else:
                                 if (last_parent and check_line in last_parent.childs):
-                                    last_parent.childs.remove(check_line)
+                                    last_parent.childs.remove(uncheck_line)
                                 check_line.childs.append(uncheck_line)
                         else:
                             uncheck_line.parent = check_line
@@ -837,8 +827,71 @@ class UHeightMapGenerator:
         for error_line in error_lines:
             self.lines.remove(error_line)
 
+    def get_normal_from_segment(self, closest_segment, polygon):
+        """
+        Вычисляет нормаль к отрезку (closest_segment) и проверяет, что она направлена наружу из многоугольника.
+
+        Параметры:
+        closest_segment : LineString
+            Отрезок, к которому нужно получить нормаль.
+        polygon : Polygon
+            Многоугольник, из которого нормаль должна быть направлена.
+
+        Возвращает:
+        tuple
+            Координаты нормали (x, y) от центра отрезка, направленной наружу многоугольника.
+        """
+
+        x1, y1 = closest_segment.coords[0]
+        x2, y2 = closest_segment.coords[1]
+
+        segment_vector = (x2 - x1, y2 - y1)
+
+        length = ((segment_vector[0] ** 2) + (segment_vector[1] ** 2)) ** 0.5
+        if length == 0:
+            raise ValueError("Отрезок не может иметь нулевую длину.")
+
+        unit_segment_vector = (segment_vector[0] / length, segment_vector[1] / length)
+
+        normal_vector = (-unit_segment_vector[1], unit_segment_vector[0])  # Поворот на 90 градусов
+
+        mid_point = Point((x1 + x2) / 2, (y1 + y2) / 2)
+
+        test_point = Point(mid_point.x + normal_vector[0] * 0.01, mid_point.y + normal_vector[1] * 0.01)
+
+        if polygon.contains(test_point):
+            normal_vector = (-normal_vector[0], -normal_vector[1])
+
+        return normal_vector
+
     def GeneratedSlopeDirectionEvent(self, slope_lines_coords):
-        pass
+        for slope_line_coord in slope_lines_coords:
+            min_distance = 10000000;
+            closed_line = None
+            rotation = slope_line_coord[1]
+            coord = slope_line_coord[0][0]
+            for line in self.lines:
+                if(line.slope_direction =="None"):
+                    projection_point, closest_segment = self.direction_from_point_to_polygon(line.shapely_polygon, coord)
+                    if(min_distance>((projection_point.x - coord[0])**2 + (projection_point.y - coord[1])**2)):
+                        min_distance = (projection_point.x - coord[0])**2 + (projection_point.y - coord[1])**2
+                        closed_line = line
+
+            if(closed_line):
+                projection_point, closest_segment = self.direction_from_point_to_polygon(closed_line.shapely_polygon, coord)
+                normal = self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon)
+                normal = (normal[0]*100*self.global_scale_multiplier, normal[1]*100*self.global_scale_multiplier )
+                project_point = [projection_point.x +  normal[0], projection_point.y +  normal[1]]
+                ray_distance = 10000
+                end_x = project_point[0] + ray_distance * math.cos(rotation + math.pi/2)
+                end_y = project_point[1] + ray_distance * math.sin(rotation + math.pi/2)
+
+                ray = LineString([(project_point[0], project_point[1]), (end_x, end_y)])
+
+                if ray.intersects(closed_line.shapely_polygon.exterior):
+                    closed_line.slope_direction = "Outside"# Красный для Outside
+                else:
+                    closed_line.slope_direction = "Inside" # Зеленый для Inside
 
     def GeneratedLineByCoords(self, lines_coords, slope_lines_coords):
         self.lines = []
@@ -861,6 +914,7 @@ class UHeightMapGenerator:
         for line in self.lines:
             line.CreatePoligon()
         self.GeneratedNestingOfLines()
+        self.GeneratedSlopeDirectionEvent(slope_lines_coords)
 
         self.CheckErrorLines()
 
@@ -869,8 +923,8 @@ class UHeightMapGenerator:
 
 
     def DrawPlotHeightMap(self):
-        max_depth = line_library.GetMaxDepthFromLines(self.lines)
-        print("Depth equal " + str(max_depth))
+        min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(self.lines)
+        print("Depth equal " + str(max_depth-min_depth))
         image = Image.new("RGB", (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)), "black")
         draw = ImageDraw.Draw(image)
         root_lines = line_library.GetRootLines(self.lines)
@@ -880,12 +934,17 @@ class UHeightMapGenerator:
             for x in range(int(self.width + self.first_level_distance)):
                 helper_functions.print_progress_bar(k,int(self.height)*int(self.width))
                 point = Point(int(x+self.min_width - self.first_level_distance/2), int(y+self.min_height - self.first_level_distance/2))
-                intensity = 0
+                intensity = -min_depth
                 owner_line = None
                 min_poligin_length = 100000000000000
                 for line in self.lines:
                     if line.shapely_polygon.contains(point):
-                        intensity += 1
+                        if(line.slope_direction == "Outside"):
+                            intensity += 1
+                        elif(line.slope_direction == "Inside"):
+                            intensity -= 1
+                        else:
+                            intensity += 1
                         if(min_poligin_length>line.shapely_polygon.length):
                             min_poligin_length = line.shapely_polygon.length
                             owner_line = line
@@ -898,11 +957,18 @@ class UHeightMapGenerator:
                             min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
                             child_line = child
                     distance_to_child_poligon = min_distance_to_child_poligon
+                    if child_line:
+                        normalize_distance_to_child_poligon = distance_to_child_poligon/(distance_to_child_poligon+ distance_to_owner_poligon )
+                        normalize_distance_to_owner_poligon = distance_to_owner_poligon / (
+                                    distance_to_child_poligon + distance_to_owner_poligon)
+                        if (child_line.slope_direction == "Outside"):
+                            normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
+                        elif (child_line.slope_direction == "Inside"):
+                            normalize_distance_to_child_poligon = -1*normalize_distance_to_child_poligon
+                        else:
+                            normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
+                        intensity +=1-normalize_distance_to_child_poligon
 
-                    normalize_distance_to_child_poligon = distance_to_child_poligon/(distance_to_child_poligon+ distance_to_owner_poligon )
-                    normalize_distance_to_owner_poligon = distance_to_owner_poligon / (
-                                distance_to_child_poligon + distance_to_owner_poligon)
-                    intensity +=1-normalize_distance_to_child_poligon
                 else:
                     min_distance_to_child_poligon = 100000000000000
                     child_line = None
@@ -913,10 +979,15 @@ class UHeightMapGenerator:
                     distance_to_child_poligon = min_distance_to_child_poligon
 
                     normalize_distance_to_child_poligon = distance_to_child_poligon/(distance_to_child_poligon+ self.first_level_distance)
-                    intensity +=1-normalize_distance_to_child_poligon
+                    if (child_line.slope_direction == "Outside"):
+                        normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
+                    elif (child_line.slope_direction == "Inside"):
+                        normalize_distance_to_child_poligon = -1*normalize_distance_to_child_poligon
+                    else:
+                        normalize_distance_to_child_poligon = normalize_distance_to_child_poligon
+                    intensity = 1-normalize_distance_to_child_poligon/2
 
-
-                white_intensity = min(255, int(intensity * 255/max_depth))  # Увеличиваем интенсивность
+                white_intensity = min(255, int(intensity * 255/(max_depth-min_depth)))
                 draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))
                 k = k + 1
         self.cook_image = image
