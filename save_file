@@ -1,5 +1,5 @@
 {
-    "file_path": "C:/Users/sgsgg/Downloads/TestOMP.omap",
+    "file_path": "C:/Users/sgsgg/Downloads/RealMapTest.omap",
     "global_scale_multiplier": 0.15,
     "first_level_distance": 20,
     "max_distance_to_border_polygon": 50,
@@ -8,6 +8,7 @@
     "min_owner_overlap": 0.8,
     "availible_parce_slope_line_setting": "Slope line",
     "draw_with_slope_line_color": true,
+    "max_distance_to_slope_line": 20,
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,

@@ -4,7 +4,8 @@ class UDelegate:
 
     def add(self, callback):
         if callable(callback):
-            self._callbacks.append(callback)
+            if not callback in self._callbacks:
+             self._callbacks.append(callback)
 
     def remove(self, callback):
         if callback in self._callbacks:

@@ -1,51 +1,133 @@
-from shapely.geometry import Point, LineString
-from shapely.ops import nearest_points
+import random
+import time
 
-def find_closest_segment(point, segments):
-    """Find the closest segment to the point."""
-    closest_segment = None
-    closest_point = None
-    min_distance = float('inf')
+class OctreeNode:
+    def __init__(self, boundary, capacity):
+        self.boundary = boundary  # (x_min, y_min, x_max, y_max)
+        self.capacity = capacity  # Максимальное количество точек в узле
+        self.points = []  # Точки в текущем узле
+        self.divided = False  # Разделен ли узел
+        self.children = []  # Дочерние узлы
 
-    # Создаем объект точки
-    shapely_point = Point(point)
+    def subdivide(self):
+        x_min, y_min, x_max, y_max = self.boundary
+        mid_x = (x_min + x_max) / 2
+        mid_y = (y_min + y_max) / 2
 
-    for segment in segments:
-        line = LineString(segment)
-        # Находим ближайшую точку на отрезке
-        nearest_point = nearest_points(shapely_point, line)[1]  # Ближайшая точка на отрезке
-        distance = shapely_point.distance(line)  # Расстояние до отрезка
+        # Создаем 4 дочерних узла
+        self.children.append(OctreeNode((x_min, y_min, mid_x, mid_y), self.capacity))  # NW
+        self.children.append(OctreeNode((mid_x, y_min, x_max, mid_y), self.capacity))  # NE
+        self.children.append(OctreeNode((x_min, mid_y, mid_x, y_max), self.capacity))  # SW
+        self.children.append(OctreeNode((mid_x, mid_y, x_max, y_max), self.capacity))  # SE
 
-        if distance < min_distance:
-            min_distance = distance
-            closest_segment = line
-            closest_point = nearest_point
+        self.divided = True
 
-    return closest_segment, closest_point
+    def insert(self, point):
+        if not self.contains(point):
+            return False
 
-def normal_vector(segment):
-    """Calculate the outward normal vector of the segment."""
-    # Получаем координаты отрезка
-    start, end = segment.coords[0], segment.coords[1]
-    # Вычисляем вектор отрезка
-    segment_vector = (end[0] - start[0], end[1] - start[1])
-    # Вычисляем нормаль (перпендикулярный вектор)
-    normal = (-segment_vector[1], segment_vector[0])  # Вектор нормали
-    # Нормализуем вектор
-    length = (normal[0]**2 + normal[1]**2) ** 0.5
-    return (normal[0] / length, normal[1] / length)  # Возвращаем нормализованный вектор
+        if len(self.points) < self.capacity:
+            self.points.append(point)
+            return True
+        else:
+            if not self.divided:
+                self.subdivide()
 
-# Пример использования
-point = (1, 2)  # Точка, для которой нужно найти нормаль
-segments = [
-    [(0, 0), (3, 0)],
-    [(1, 0), (1, 4)],
-    [(0, 0), (0, 3)],
-]
+            for child in self.children:
+                if child.insert(point):
+                    return True
 
-closest_segment, closest_point = find_closest_segment(point, segments)
-normal = normal_vector(closest_segment)
+        return False
 
-print(f"Closest segment: {closest_segment}")
-print(f"Projection point: {closest_point}")
-print(f"Normal vector: {normal}")
+    def contains(self, point):
+        x, y = point
+        x_min, y_min, x_max, y_max = self.boundary
+        return x_min <= x <= x_max and y_min <= y <= y_max
+
+    def query(self, range, found_points):
+        if not self.intersects(range):
+            return
+
+        for point in self.points:
+            if range_contains(range, point):
+                found_points.append(point)
+
+        if self.divided:
+            for child in self.children:
+                child.query(range, found_points)
+
+    def intersects(self, range):
+        x_min1, y_min1, x_max1, y_max1 = self.boundary
+        x_min2, y_min2, x_max2, y_max2 = range
+        return not (x_min1 > x_max2 or x_max1 < x_min2 or y_min1 > y_max2 or y_max1 < y_min2)
+
+
+def range_contains(range, point):
+    x_min, y_min, x_max, y_max = range
+    x, y = point
+    return x_min <= x <= x_max and y_min <= y <= y_max
+
+
+class Octree:
+    def __init__(self, boundary, capacity):
+        self.root = OctreeNode(boundary, capacity)
+
+    def insert(self, point):
+        self.root.insert(point)
+
+    def query(self, range):
+        found_points = []
+        self.root.query(range, found_points)
+        return found_points
+
+
+def generate_random_points(num_points, x_range, y_range):
+    return [(random.uniform(*x_range), random.uniform(*y_range)) for _ in range(num_points)]
+
+
+def standard_search(points, search_range):
+    found_points = []
+    for point in points:
+        if range_contains(search_range, point):
+            found_points.append(point)
+    return found_points
+
+
+if __name__ == "__main__":
+    # Генерация случайных точек
+    num_points = 100000  # Количество точек
+    x_range = (0, 100)
+    y_range = (0, 100)
+
+    points = generate_random_points(num_points, x_range, y_range)
+
+    # Определяем диапазон поиска
+    search_range = (15, 15, 35, 35)  # (x_min, y_min, x_max, y_max)
+
+    # Стандартный поиск
+    start_time = time.time()
+    found_points_standard = standard_search(points, search_range)
+    standard_time = time.time() - start_time
+    print(f"Стандартный поиск найдено точек: {len(found_points_standard)} за {standard_time:.6f} секунд")
+
+    # Поиск с использованием Octree
+    octree = Octree((0, 0, 100, 100), capacity=4)
+    for point in points:
+        octree.insert(point)
+
+    start_time = time.time()
+    found_points_octree = octree.query(search_range)
+    octree_time = time.time() - start_time
+    print(f"Поиск в Octree найдено точек: {len(found_points_octree)} за {octree_time:.6f} секунд")
+
+    start_time = time.time()
+    found_points_standard = standard_search(points, search_range)
+    standard_time = time.time() - start_time
+    print(f"Стандартный поиск найдено точек: {len(found_points_standard)} за {standard_time:.6f} секунд")
+    
+    start_time = time.time()
+    found_points_octree = octree.query(search_range)
+    octree_time = time.time() - start_time
+    print(f"Поиск в Octree найдено точек: {len(found_points_octree)} за {octree_time:.6f} секунд")
+
+

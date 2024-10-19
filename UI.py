@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 import PIL.ImageQt as ImageQt
 import helper_functions
 import json
@@ -18,15 +18,22 @@ from playsound import playsound
 from Delegates import UDelegate
 
 class UHeightmapGenerationWarperThread(QThread):
+    progress_signal = pyqtSignal(str, int)
+
     def __init__(self):
         super().__init__()
         self.settings = None
+
+    def call_update_percent_delegate(self, text, value):
+        # Отправляем сигнал с текстом и значением
+        self.progress_signal.emit(text, value)
 
     def set_heightmap_generator(self, heightmap_generator):
         self.settings = heightmap_generator
 
     def run(self):
         if self.settings:
+            self.settings.progress_delegate.add(self.call_update_percent_delegate)
             self.settings.MainLaunchOperations()
 
 
@@ -67,7 +74,7 @@ class UHeightmapGeneratorUI(QMainWindow):
 
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setGeometry(30, 40, 300, 25)  # Размер и положение прогресс-бара
-        self.progress_bar.setMaximum(101)  # Устанавливаем максимальное значение
+        self.progress_bar.setMaximum(100)  # Устанавливаем максимальное значение
         progress_layout.addWidget(self.progress_bar)
 
         left_layout.addLayout(progress_layout)
@@ -150,10 +157,10 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.availible_parce_lines_array.apply_key_event()
         self.fix_line_settings_array.apply_key_event()
 
-
-    def updateProgress(self, text, value):
+    @pyqtSlot(str, int)
+    def update_progress_bar(self, text, value):
         self.progress_text.setText(text)
-        value = int(value*100)
+        value = min(100,value)
         if(self.progress_bar):
             self.progress_bar.setValue(value)
 
@@ -306,7 +313,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         if(self.settings.file_path and os.path.exists(self.settings.file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
             self.settings.end_cook_delegate.add(self.on_image_cooked)
-            self.settings.progress_delegate.add(self.updateProgress)
+            self.thread_warper.progress_signal.connect(self.update_progress_bar)
             self.thread_warper.set_heightmap_generator(self.settings)
             self.thread_warper.start()
 

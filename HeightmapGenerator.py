@@ -132,6 +132,7 @@ class UHeightMapGenerator:
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
         self.min_owner_overlap = 0.95
+        self.max_distance_to_slope_line = 20
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines = []  # Линии, которые будут обрабатываться
@@ -141,13 +142,14 @@ class UHeightMapGenerator:
         self.max_border_polygon = None  # Максимальный полигон границы
         self.end_cook_delegate = Delegates.UDelegate()  # Делегат для завершея
         self.progress_delegate = Delegates.UDelegate()
+        self.fix_line_index = 0;
 
         self.save_tag = ['file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color']
+                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color', 'max_distance_to_slope_line']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color']
+                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting', 'draw_with_slope_line_color', 'max_distance_to_slope_line']
 
 
 
@@ -617,11 +619,17 @@ class UHeightMapGenerator:
         return self.GeneratedLineByCoords(lines_coords, slope_lines_coords)
 
     def FixMergeNearLines(self, setting:UFixingLinesSettings):
+
         if(setting.apply_merge_line_value):
             answer_lines = []
             availible_lines = self.lines.copy()
 
+            count = 0
             while len(availible_lines) >= 1:
+                count = count + 1
+                self.progress_delegate.invoke(
+                    "fixing_lines_settings FixMergeNearLines : index = " + str(self.fix_line_index), int(count/len(self.lines)*100))
+
                 line = availible_lines[0]
 
                 # Если линия замкнута (первая точка равна последней) и она не внутри полигона
@@ -740,7 +748,11 @@ class UHeightMapGenerator:
 
     def FixUnboarderLines(self, setting:UFixingLinesSettings):
         if(setting.apply_fix_unborder_lines):
+            k = 0
             for line in self.lines:
+                k = k + 1
+                self.progress_delegate.invoke(
+                    "fixing_lines_settings FixUnboarderLines : index = " + str(self.fix_line_index), int(k/len(self.lines)*100))
                 if (line.points[0] != line.points[-1]):
                     if not self.border_polygon.contains(Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1])):
                         G = self.create_graph_from_polygon(self.max_border_polygon, setting.hight_find_direction)
@@ -784,7 +796,10 @@ class UHeightMapGenerator:
          Проверки работают на случай косяка предыдуших этапов.
         """
         uncheck_lines = self.lines.copy()
+        k = 0
         while len(uncheck_lines) > 0:
+            k = k + 1
+            self.progress_delegate.invoke("generated_neasting_of_lines", int(k/len(self.lines)*100))
             check_line = uncheck_lines[0]
             uncheck_lines.remove(check_line)
             min_parent_area = 1000000000
@@ -868,8 +883,11 @@ class UHeightMapGenerator:
         return normal_vector
 
     def GeneratedSlopeDirectionEvent(self, slope_lines_coords):
+        k = 0
         for slope_line_coord in slope_lines_coords:
-            min_distance = 10000000;
+            k = k + 1
+            self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", int(k/len(slope_lines_coords)*100))
+            min_distance = self.max_distance_to_slope_line;
             closed_line = None
             rotation = slope_line_coord[1]
             coord = slope_line_coord[0][0]
@@ -906,26 +924,28 @@ class UHeightMapGenerator:
 
         self.SetupBorderPoligonsDataFromLines(-2)
 
-        k = 0
+        self.fix_line_index = 0
         for setting in self.fixing_lines_settings:
-            self.progress_delegate.invoke("fixing_lines_settings FixMergeNearLines : index = " + str(k), 0.5)
+            self.progress_delegate.invoke("fixing_lines_settings FixMergeNearLines : index = " + str(self.fix_line_index ), 0)
             self.FixMergeNearLines(setting)
             if(setting.regenerate_borders):
                 self.SetupBorderPoligonsDataFromLines(setting.border_distance)
-            self.progress_delegate.invoke("fixing_lines_settings FixUnboarderLines : index = " + str(k), 1.0)
+            self.progress_delegate.invoke("fixing_lines_settings FixUnboarderLines : index = " + str(self.fix_line_index ), 0)
             self.FixUnboarderLines(setting)
-            k = k + 1
+            self.fix_line_index  = self.fix_line_index  + 1
 
         self.progress_delegate.invoke("generated_neasting_of_lines", 0)
         for line in self.lines:
             line.CreatePoligon()
         self.GeneratedNestingOfLines()
+        self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", 0)
         self.GeneratedSlopeDirectionEvent(slope_lines_coords)
 
         self.CheckErrorLines()
 
         if(self.remove_all_error_lines):
             self.RemoveAllErrorLines()
+        self.progress_delegate.invoke("All preparations are completed", 100)
 
 
     def DrawPlotHeightMap(self):
@@ -939,6 +959,7 @@ class UHeightMapGenerator:
         for y in range(int(self.height + self.first_level_distance)):
             for x in range(int(self.width + self.first_level_distance)):
                 helper_functions.print_progress_bar(k,int(self.height + self.first_level_distance)*int(self.width + self.first_level_distance))
+                self.progress_delegate.invoke("Generate Texture", int(k/(int(self.height + self.first_level_distance)*int(self.width + self.first_level_distance))*100))
                 point = Point(int(x+self.min_width - self.first_level_distance/2), int(y+self.min_height - self.first_level_distance/2))
                 intensity = -min_depth
                 owner_line = None
@@ -1012,6 +1033,7 @@ class UHeightMapGenerator:
                 draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))
                 k = k + 1
         self.cook_image = image
+        self.progress_delegate.invoke("Complete", 100)
         return image
 
     def MainLaunchOperations(self):
