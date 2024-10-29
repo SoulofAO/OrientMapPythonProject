@@ -61,6 +61,14 @@ class OctreeNode:
         x_min2, y_min2, x_max2, y_max2 = range
         return not (x_min1 > x_max2 or x_max1 < x_min2 or y_min1 > y_max2 or y_max1 < y_min2)
 
+    def print_tree(self, level=0):
+        indent = "  " * level
+        print(f"{indent}Node at {self.boundary} with {len(self.points)} points")
+        if self.divided:
+            for i, child in enumerate(self.children):
+                print(f"{indent} Child {i + 1}:")
+                child.print_tree(level + 1)
+
 
 def range_contains(range, point):
     x_min, y_min, x_max, y_max = range
@@ -79,6 +87,8 @@ class Octree:
         found_points = []
         self.root.query(range, found_points)
         return found_points
+    def print_tree(self):
+        self.root.print_tree()
 
 
 def generate_random_points(num_points, x_range, y_range):
@@ -95,7 +105,7 @@ def standard_search(points, search_range):
 
 if __name__ == "__main__":
     # Генерация случайных точек
-    num_points = 100000  # Количество точек
+    num_points = 10000  # Количество точек
     x_range = (0, 100)
     y_range = (0, 100)
 
@@ -129,5 +139,6 @@ if __name__ == "__main__":
     found_points_octree = octree.query(search_range)
     octree_time = time.time() - start_time
     print(f"Поиск в Octree найдено точек: {len(found_points_octree)} за {octree_time:.6f} секунд")
+
 
 
