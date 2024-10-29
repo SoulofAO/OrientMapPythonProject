@@ -14,6 +14,8 @@ from scipy.spatial import ConvexHull
 from playsound import playsound
 import xml.etree.ElementTree as ET
 from Octree import Octree, OctreeNode
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
@@ -1012,6 +1014,95 @@ class UHeightMapGenerator:
         else:
             return owner_line.GetSlopeDirectionDepthFromLineToUp()
 
+    def calculate_intensity_for_point(self, x, y, root_lines, min_depth, max_depth):
+        point = Point(int(x + self.min_width - self.first_level_distance / 2),
+                      int(y + self.min_height - self.first_level_distance / 2))
+        owner_line = None
+        intensity = -min_depth
+        if self.use_octree_generated_heightmap_data:
+            owner_line = self.FindOwnerLine(point, root_lines)
+            intensity += self.CalculateOwnerLineDepth(owner_line)
+        else:
+            min_poligin_length = 100000000000000
+            for line in self.lines:
+                if line.shapely_polygon.contains(point):
+                    if line.slope_direction == "Outside":
+                        intensity += 1
+                    elif line.slope_direction == "Inside":
+                        intensity -= 1
+                    else:
+                        intensity += 1
+                    if min_poligin_length > line.shapely_polygon.length:
+                        min_poligin_length = line.shapely_polygon.length
+                        owner_line = line
+
+        if owner_line:
+            distance_to_owner_poligon = point.distance(owner_line.shapely_polygon.exterior)
+            sum_distance = 0
+            for child in owner_line.childs:
+                min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                if min_distance_to_child_poligon < self.first_level_distance:
+                    sum_distance += min_distance_to_child_poligon
+            intensity_sum = 0.0
+            percent_owner_control = clamp(1 - distance_to_owner_poligon / self.first_level_distance, 0, 1)
+
+            if distance_to_owner_poligon < self.first_level_distance:
+                percent = distance_to_owner_poligon / self.first_level_distance
+                if owner_line.slope_direction == "Outside":
+                    intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
+                elif owner_line.slope_direction == "Inside":
+                    intensity_sum -= distance_to_owner_poligon / self.first_level_distance * percent_owner_control
+                else:
+                    intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
+
+            if sum_distance != 0:
+                for child in owner_line.childs:
+                    min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                    if min_distance_to_child_poligon < self.first_level_distance:
+                        normalize_distance_to_child_poligon = clamp(
+                            min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
+                            (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
+                        if child.slope_direction == "Outside":
+                            intensity_sum += normalize_distance_to_child_poligon
+                        elif child.slope_direction == "Inside":
+                            intensity_sum -= normalize_distance_to_child_poligon
+                        else:
+                            intensity_sum += normalize_distance_to_child_poligon
+                intensity += intensity_sum
+        else:
+            sum_distance = 0
+            for child in root_lines:
+                min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                if min_distance_to_child_poligon < self.first_level_distance:
+                    sum_distance += min_distance_to_child_poligon
+            intensity_sum = 0.0
+            if sum_distance != 0.0:
+                for child in root_lines:
+                    min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                    if min_distance_to_child_poligon < self.first_level_distance:
+                        normalize_distance_to_child_poligon = clamp(
+                            min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
+                            (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
+                        if child.slope_direction == "Outside":
+                            intensity_sum += normalize_distance_to_child_poligon
+                        elif child.slope_direction == "Inside":
+                            intensity_sum -= normalize_distance_to_child_poligon
+                        else:
+                            intensity_sum += normalize_distance_to_child_poligon
+                intensity += intensity_sum
+
+        white_intensity = min(255, int(intensity * 255 / (max_depth - min_depth)))
+        return (x, y, white_intensity)
+
+    # Основная функция для обработки блока
+    def process_block(self, x_start, x_end, y_start, y_end, root_lines, min_depth, max_depth):
+        pixels = []
+        for y in range(y_start, y_end):
+            for x in range(x_start, x_end):
+                pixels.append(self.calculate_intensity_for_point(x, y, root_lines, min_depth, max_depth))
+        return pixels
+
+    # Функция для многопоточной обработки и отрисовки изображения
     def DrawPlotHeightMap(self):
         root_lines = line_library.GetRootLines(self.lines)
         min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(root_lines)
@@ -1021,97 +1112,31 @@ class UHeightMapGenerator:
                           "black")
         draw = ImageDraw.Draw(image)
 
+        block_size = 1000
+        width = int(self.width + self.first_level_distance)
+        height = int(self.height + self.first_level_distance)
+        blocks = [
+            (x, min(x + block_size, width), y, min(y + block_size, height))
+            for y in range(0, height, block_size)
+            for x in range(0, width, block_size)
+        ]
+        print(len(blocks))
+
         k = 0
-        for y in range(int(self.height + self.first_level_distance)):
-            for x in range(int(self.width + self.first_level_distance)):
-                helper_functions.print_progress_bar(k, int(self.height + self.first_level_distance) * int(
-                    self.width + self.first_level_distance))
-                self.progress_delegate.invoke("Generate Texture", int(k / (
-                            int(self.height + self.first_level_distance) * int(
-                        self.width + self.first_level_distance)) * 100))
-                point = Point(int(x + self.min_width - self.first_level_distance / 2),
-                              int(y + self.min_height - self.first_level_distance / 2))
-                owner_line = None
-                intensity = -min_depth
-                if(self.use_octree_generated_heightmap_data):
-                    owner_line = self.FindOwnerLine(point, root_lines)
-                    intensity = intensity + self.CalculateOwnerLineDepth(owner_line)
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(self.process_block, x_start, x_end, y_start, y_end, root_lines, min_depth, max_depth)
+                for (x_start, x_end, y_start, y_end) in blocks
+            ]
+            for future in futures:
+                for x, y, white_intensity in future.result():
+                    draw.point((x, y), fill=(white_intensity, white_intensity, white_intensity))
+                k += 1
+                helper_functions.print_progress_bar(k, len(blocks))
+                self.progress_delegate.invoke(
+                    "Generate Texture", int(k / len(blocks) * 100)
+                )
 
-                else:
-                    min_poligin_length = 100000000000000
-                    for line in self.lines:
-                        if line.shapely_polygon.contains(point):
-                            if (line.slope_direction == "Outside"):
-                                intensity += 1
-                            elif (line.slope_direction == "Inside"):
-                                intensity -= 1
-                            else:
-                                intensity += 1
-                            if (min_poligin_length > line.shapely_polygon.length):
-                                min_poligin_length = line.shapely_polygon.length
-                                owner_line = line
-
-
-
-                if owner_line:
-                    distance_to_owner_poligon = point.distance(owner_line.shapely_polygon.exterior)
-                    sum_distance = 0
-                    for child in owner_line.childs:
-                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                        if (min_distance_to_child_poligon < self.first_level_distance):
-                            sum_distance += min_distance_to_child_poligon
-                    intensity_sum = 0.0
-                    percent_owner_control = clamp(1 - distance_to_owner_poligon / self.first_level_distance, 0, 1)
-
-                    if (distance_to_owner_poligon < self.first_level_distance):
-                        percent = distance_to_owner_poligon / self.first_level_distance
-                        if (owner_line.slope_direction == "Outside"):
-                            intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-                        elif (owner_line.slope_direction == "Inside"):
-                            intensity_sum -= distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-                        else:
-                            intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-
-                    if(sum_distance!= 0):
-                        for child in owner_line.childs:
-                            min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                            if (min_distance_to_child_poligon < self.first_level_distance):
-                                normalize_distance_to_child_poligon = clamp(
-                                    min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
-                                    (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
-                                if (child.slope_direction == "Outside"):
-                                    intensity_sum += normalize_distance_to_child_poligon
-                                elif (child.slope_direction == "Inside"):
-                                    intensity_sum -= normalize_distance_to_child_poligon
-                                else:
-                                    intensity_sum += normalize_distance_to_child_poligon
-
-                        intensity = intensity + intensity_sum
-                else:
-                    sum_distance = 0
-                    for child in root_lines:
-                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                        if (min_distance_to_child_poligon < self.first_level_distance):
-                            sum_distance += min_distance_to_child_poligon
-                    intensity_sum = 0.0
-                    if(sum_distance!=0.0):
-                        for child in root_lines:
-                            min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                            if (min_distance_to_child_poligon < self.first_level_distance):
-                                normalize_distance_to_child_poligon = clamp(
-                                    min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
-                                    (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
-                                if (child.slope_direction == "Outside"):
-                                    intensity_sum += normalize_distance_to_child_poligon
-                                elif (child.slope_direction == "Inside"):
-                                    intensity_sum -= normalize_distance_to_child_poligon
-                                else:
-                                    intensity_sum += normalize_distance_to_child_poligon
-                        intensity = intensity + intensity_sum
-
-                white_intensity = min(255, int(intensity * 255 / (max_depth - min_depth)))
-                draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))
-                k = k + 1
         self.cook_image = image
         self.progress_delegate.invoke("Complete", 100)
         return image
