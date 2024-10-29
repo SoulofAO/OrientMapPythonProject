@@ -4,11 +4,14 @@
     "first_level_distance": 20,
     "max_distance_to_border_polygon": 50,
     "draw_with_max_border_polygon": true,
-    "remove_all_error_lines": false,
+    "remove_all_error_lines": true,
     "min_owner_overlap": 0.8,
     "availible_parce_slope_line_setting": "Slope line",
     "draw_with_slope_line_color": true,
     "max_distance_to_slope_line": 20,
+    "use_octree_to_fix_line": false,
+    "use_octree_to_recive_slope_line": true,
+    "use_octree_generated_heightmap_data": true,
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,
@@ -22,7 +25,7 @@
         {
             "merge_point_value": 0,
             "max_merge_line_value": 20,
-            "border_distance": 10,
+            "border_distance": -10,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
@@ -30,7 +33,25 @@
         },
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 1000,
+            "max_merge_line_value": 100,
+            "border_distance": -10,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 200,
+            "border_distance": -10,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 500,
             "border_distance": 0,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
@@ -39,7 +60,7 @@
         },
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 1000,
+            "max_merge_line_value": 700,
             "border_distance": 30,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
@@ -48,7 +69,16 @@
         },
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 1000,
+            "max_merge_line_value": 1200,
+            "border_distance": 50,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 2000,
             "border_distance": 70,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,

@@ -95,6 +95,20 @@ class ULine:
                 new_depth = depth + 1
             return new_depth, new_depth
 
+    def GetSlopeDirectionDepthFromLineToUp(self):
+        if self.slope_direction == "Outside":
+            new_depth = 1
+        elif self.slope_direction == "Inside":
+            new_depth = -1
+        else:
+            new_depth = 1
+        if(self.parent):
+            new_depth = new_depth + self.parent.GetSlopeDirectionDepthFromLineToUp()
+            return new_depth
+        else:
+            return new_depth
+
+
     def MergeСlosePoints(self, threshold):
         merged_line = []
         previous_point = None
