@@ -4,7 +4,7 @@ import numpy as np
 import random
 
 class ULine:
-    def __init__(self, parent, childs, shapely_polygon, points):
+    def __init__(self, seed, parent, childs, shapely_polygon, points):
         self.parent = parent
         self.childs = childs
         self.shapely_polygon = shapely_polygon
@@ -14,12 +14,12 @@ class ULine:
         self.correct_line = True;
         self.power = 1.0
         self.slope_direction = "None" #None, Inside, Outside
-        self.GenerateColorByLines()
+        self.GenerateColorByLines(seed)
 
 
 
-    def GenerateColorByLines(self):
-        s = 0
+    def GenerateColorByLines(self, seed):
+        s = seed
         for point in self.points:
             s = s + point[0]+ point[1]
         s = abs(s)

@@ -98,3 +98,19 @@ def fix_coordinates(coordinates):
         coordinates[len(coordinates) - 1].pop(len(coordinates[len(coordinates) - 1])-1)
 
     return coordinates
+
+
+def angle_between_vectors(v1, v2):
+    # Векторное произведение для нахождения угла между двумя векторами
+    dot_product = v1[0] * v2[0] + v1[1] * v2[1]
+    magnitude_v1 = math.sqrt(v1[0] ** 2 + v1[1] ** 2)
+    magnitude_v2 = math.sqrt(v2[0] ** 2 + v2[1] ** 2)
+
+    if magnitude_v1 == 0 or magnitude_v2 == 0:
+        return 0  # Защита от деления на ноль (можно изменить по необходимости)
+
+    cos_angle = dot_product / (magnitude_v1 * magnitude_v2)
+    # Ограничиваем значение косинуса для предотвращения ошибок из-за погрешностей
+    cos_angle = max(-1.0, min(1.0, cos_angle))
+
+    return math.acos(cos_angle)  # Возвращаем угол в радианах

@@ -14,6 +14,9 @@ from scipy.spatial import ConvexHull
 from playsound import playsound
 import xml.etree.ElementTree as ET
 from Octree import Octree, OctreeNode
+from enum import Enum
+
+
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
@@ -74,6 +77,7 @@ class UFixingLinesSettings:
 
         self.merge_point_value = 0;
         self.max_merge_line_value = 200;
+        self.max_angle = 90
 
         self.border_distance = 0;
         self.hight_find_direction = "both"
@@ -84,9 +88,9 @@ class UFixingLinesSettings:
         self.regenerate_borders = True
 
         self.save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle"]
         self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle"]
 
 
     def __str__(self):
@@ -118,6 +122,7 @@ class UHeightMapGenerator:
         self.max_height = -1000000  # Максимальная высота
         self.min_width = 1000000  # Минимальная ширина
         self.min_height = 1000000  # Минимальная высота
+        self.seed = 1
 
         self.max_distance_to_border_polygon = 100  # Максимальное расстояние до границы полигона
 
@@ -138,6 +143,7 @@ class UHeightMapGenerator:
         self.use_octree_to_fix_line = False
         self.use_octree_to_recive_slope_line = True
         self.use_octree_generated_heightmap_data = True
+        self.blend_slope_line = True
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines = []  # Линии, которые будут обрабатываться
@@ -154,12 +160,12 @@ class UHeightMapGenerator:
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                          'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                         'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data']
+                         'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data', 'blend_slope_line', 'seed']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                            'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data']
+                            'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data', 'blend_slope_line', 'seed']
 
 
 
@@ -168,7 +174,7 @@ class UHeightMapGenerator:
         data = {k: getattr(self, k) for k in self.save_tag}
         # Сериализация списка fixing_lines_settings
         data['fixing_lines_settings'] = [settings.to_dict() for settings in self.fixing_lines_settings]
-        data['availible_parce_settings'] = [settings.to_dict() for settings in self.availible_parce_settings]
+        data['availible_parce_contour_line_settings'] = [settings.to_dict() for settings in self.availible_parce_contour_line_settings]
         return data
 
     def from_dict(self, data):
@@ -668,58 +674,38 @@ class UHeightMapGenerator:
                             continue
 
                         if test_line.points[0] != test_line.points[-1]:
-                            # Проверка первой пары точек: первая точка обеих линий
-                            try:
-                                if(self.border_polygon.contains(Point(line.points[0])) and self.border_polygon.contains(Point(test_line.points[0]))):
-                                    test_distance_1 = (test_line.points[0][0] - line.points[0][0]) ** 2 + (test_line.points[0][1] - line.points[0][1]) ** 2
-                                    if test_distance_1 < optimal_line_const and test_distance_1 <setting.max_merge_line_value:
-                                        optimal_line_const = test_distance_1
-                                        optimal_line_to_merge_index = k
-                                        optimal_start_point_to_merge_index = 0
-                                        optimal_end_point_to_merge_index = 0
-                            except:
-                                print("Wrong Geometry")
 
-                            # Проверка второй пары точек: первая точка первой линии и последняя точка второй линии
-                            try:
-                                if (self.border_polygon.contains(Point(line.points[0])) and self.border_polygon.contains(
-                                        Point(test_line.points[-1]))):
-                                    test_distance_2 = (test_line.points[-1][0] - line.points[0][0]) ** 2 + (test_line.points[-1][1] - line.points[0][1]) ** 2
-                                    if test_distance_2 < optimal_line_const and test_distance_2 < setting.max_merge_line_value:
-                                        optimal_line_const = test_distance_2
-                                        optimal_line_to_merge_index = k
-                                        optimal_start_point_to_merge_index = 0
-                                        optimal_end_point_to_merge_index = len(test_line.points) - 1
-                            except:
-                                print("Wrong Geometry")
+                            point_pairs = [
+                                (0, 0),  # line.points[0] и test_line.points[0]
+                                (0, -1),  # line.points[0] и test_line.points[-1]
+                                (-1, -1),  # line.points[-1] и test_line.points[-1]
+                                (-1, 0),  # line.points[-1] и test_line.points[0]
+                            ]
+                            for i1, i2 in point_pairs:
+                                try:
+                                    p11 = line.points[i1]
+                                    p12 = line.points[i1 + 1]
+                                    p21 = test_line.points[len(test_line.points) - 1]
+                                    p22 = test_line.points[len(test_line.points) - 2]
 
-                            # Проверка третьей пары точек: последние точки обеих линий
-                            try:
-                                if (self.border_polygon.contains(Point(line.points[-1])) and self.border_polygon.contains(
-                                        Point(test_line.points[-1]))):
-                                    test_distance_3 = (test_line.points[-1][0] - line.points[-1][0]) ** 2 + (test_line.points[-1][1] - line.points[-1][1]) ** 2
-                                    if test_distance_3 < optimal_line_const and test_distance_3 < setting.max_merge_line_value:
-                                        optimal_line_const = test_distance_3
-                                        optimal_line_to_merge_index = k
-                                        optimal_start_point_to_merge_index = len(line.points) - 1
-                                        optimal_end_point_to_merge_index = len(test_line.points) - 1
-                            except:
-                                print("Wrong Geometry")
-                            try:
-                                if (self.border_polygon.contains(Point(line.points[-1])) and self.border_polygon.contains(
-                                        Point(test_line.points[0]))):
-                                        # Проверка четвертой пары точек: последняя точка первой линии и первая точка второй линии
-                                    test_distance_4 = (test_line.points[0][0] - line.points[-1][0]) ** 2 + (test_line.points[0][1] - line.points[-1][1]) ** 2
-                                    if test_distance_4 < optimal_line_const and test_distance_4 < setting.max_merge_line_value:
-                                        optimal_line_const = test_distance_4
-                                        optimal_line_to_merge_index = k
-                                        optimal_start_point_to_merge_index = len(line.points) - 1
-                                        optimal_end_point_to_merge_index = 0
-                            except:
-                                print("Wrong Geometry")
+                                    if self.border_polygon.contains(Point(p11)) and self.border_polygon.contains(
+                                            Point(p12)):
+                                        test_distance = (p12[0] - p11[0]) ** 2 + (p12[1] - p11[1]) ** 2
+                                        if test_distance < optimal_line_const and test_distance < setting.max_merge_line_value:
+                                            v1 = (p12[0] - p11[0], p12[1] - p11[1])
+                                            v2 = (p22[0] - p21[0], p22[1] - p21[1])
+                                            angle = angle_between_vectors(v1, v2)
+                                            if angle < setting.max_angle:
+                                                optimal_line_const = test_distance
+                                                optimal_line_to_merge_index = k
+                                                optimal_start_point_to_merge_index = i1 if i1 >= 0 else len(
+                                                    line.points) + i1
+                                                optimal_end_point_to_merge_index = i2 if i2 >= 0 else len(
+                                                    test_line.points) + i2
+                                except Exception as e:
+                                    print("Wrong Geometry:", e)
                         k += 1
 
-                    # Если нашлась линия для объединения или линия замыкает сама себя
                     if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
                         line.points.append(line.points[0])  # Добавляем первую точку в конец для замыкания
                         line.start_points.append(line.points[0])
@@ -897,6 +883,7 @@ class UHeightMapGenerator:
 
         return normal_vector
 
+
     def GeneratedSlopeDirectionEvent(self, slope_lines_coords):
         if(self.use_octree_to_recive_slope_line):
             k = 0
@@ -955,11 +942,63 @@ class UHeightMapGenerator:
                     else:
                         closed_line.slope_direction = "Inside" # Зеленый для Inside
 
+        if self.blend_slope_line:
+            error_lines = [{"line": line, "counter": 0} for line in self.lines if line.slope_direction == "None"]
+            counter = 0
+
+            while error_lines:
+                if counter >= len(error_lines):
+                    counter = 0
+
+                item = error_lines[counter]
+                line = item["line"]
+                number_repeat = item["counter"]
+
+                if number_repeat > 10:
+                    error_lines.pop(counter)
+                    continue
+
+                counter_line_result = {"Inside": 0, "Outside": 0}
+
+                sum_connections = (1 if line.parent else 0) + len(line.childs)
+
+                if line.parent:
+                    if line.parent.slope_direction == "Inside":
+                        counter_line_result["Inside"] += 1
+                    if line.parent.slope_direction == "Outside":
+                        counter_line_result["Outside"] += 1
+
+                for child in line.childs:
+                    if child.slope_direction == "Inside":
+                        counter_line_result["Inside"] += 1
+                    if child.slope_direction == "Outside":
+                        counter_line_result["Outside"] += 1
+
+                success_operation = False
+                known_connections = counter_line_result["Inside"] + counter_line_result["Outside"]
+
+                if known_connections > 0:
+                    inside_ratio = counter_line_result["Inside"] / known_connections
+                    outside_ratio = counter_line_result["Outside"] / known_connections
+
+                    if inside_ratio >= 0.5:
+                        line.slope_direction = "Inside"
+                        success_operation = True
+                    elif outside_ratio >= 0.5:
+                        line.slope_direction = "Outside"
+                        success_operation = True
+
+                if success_operation:
+                    error_lines.pop(counter)
+                else:
+                    item["counter"] += 1
+                    counter += 1
+
     def GeneratedLineByCoords(self, lines_coords, slope_lines_coords):
         self.lines = []
 
         for line in lines_coords:
-            new_line = line_library.ULine(None, [], None, line)
+            new_line = line_library.ULine(self.seed, None, [], None, line)
             new_line.correct_line = True
             self.lines.append(new_line)
 
