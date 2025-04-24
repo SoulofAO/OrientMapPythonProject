@@ -15,7 +15,8 @@ from playsound import playsound
 import xml.etree.ElementTree as ET
 from Octree import Octree, OctreeNode
 from enum import Enum
-
+from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+from shapely.ops import nearest_points
 
 
 def clamp(value, min_value, max_value):
@@ -67,6 +68,30 @@ class UAvailibleParceLineSettings:
             if k in self.save_tag:
                 setattr(self, k, v)
 
+def interpolate_two_points(p0, p1, value0, value1, query_pt: Point):
+    """
+    Линейно интерполирует значение в точке query_pt,
+    находящейся на плоскости, по двум контрольным точкам.
+
+    p0, p1 – кортежи (x, y) контрольных точек
+    value0, value1 – значения в этих точках
+    query_pt – shapely.geometry.Point, позиция запроса
+    """
+    # преобразуем в numpy‑векторы
+    a = np.asarray(p0, dtype=float)
+    b = np.asarray(p1, dtype=float)
+    q = np.asarray([query_pt.x, query_pt.y], dtype=float)
+
+    # если точки совпали – вернём среднее значение
+    if np.allclose(a, b):
+        return 0.5 * (value0 + value1)
+
+    # проецируем q на отрезок ab и находим параметр t∈[0,1]
+    ab = b - a
+    t = np.clip(np.dot(q - a, ab) / np.dot(ab, ab), 0.0, 1.0)
+
+    # интерполируем значение
+    return value0 + t * (value1 - value0)
 
 class UFixingLinesSettings:
     counter = -1
@@ -82,15 +107,16 @@ class UFixingLinesSettings:
         self.border_distance = 0;
         self.hight_find_direction = "both"
         self.hight_find_direction_options = ['both', 'forward', 'backward']
+        self.fix_unborder_if_both_point_unborder = True
 
         self.apply_fix_unborder_lines = True
         self.apply_merge_line_value = True
         self.regenerate_borders = True
 
         self.save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle", "fix_unborder_if_both_point_unborder"]
         self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle", "fix_unborder_if_both_point_unborder"]
 
 
     def __str__(self):
@@ -122,6 +148,7 @@ class UHeightMapGenerator:
         self.max_height = -1000000  # Максимальная высота
         self.min_width = 1000000  # Минимальная ширина
         self.min_height = 1000000  # Минимальная высота
+        self.count_error_lines = 0
         self.seed = 1
 
         self.max_distance_to_border_polygon = 100  # Максимальное расстояние до границы полигона
@@ -142,7 +169,6 @@ class UHeightMapGenerator:
         self.max_distance_to_slope_line = 20
         self.use_octree_to_fix_line = False
         self.use_octree_to_recive_slope_line = True
-        self.use_octree_generated_heightmap_data = True
         self.blend_slope_line = True
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
@@ -154,18 +180,20 @@ class UHeightMapGenerator:
         self.max_border_polygon = None  # Максимальный полигон границы
         self.end_cook_delegate = Delegates.UDelegate()  # Делегат для завершея
         self.progress_delegate = Delegates.UDelegate()
+        self.error_lines_delegate = Delegates.UDelegate()
         self.fix_line_index = 0;
+
 
         self.save_tag = ['file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                          'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                         'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data', 'blend_slope_line', 'seed']
+                         'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                            'use_octree_to_recive_slope_line', 'use_octree_generated_heightmap_data', 'blend_slope_line', 'seed']
+                            'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed']
 
 
 
@@ -275,29 +303,31 @@ class UHeightMapGenerator:
         for available_parce_contour_line in self.availible_parce_contour_line_settings:
             symbols_lines.update(helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
 
-        for obj in root.findall(f'.//{namespace}object'):
-            symbol_id = obj.get('symbol')
-            if symbol_id in symbols_lines:
-                coords = obj.find(f'{namespace}coords').text.strip()
-                coords = coords.split(";")  # Сначала разделяем по ";"
-                coords = [coord.split(" ") for coord in coords]
-                coords = helper_functions.fix_coordinates(coords)
-                coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
-                lines.append([coords_list])
+        objects = root.findall(f'.//{namespace}objects')
+        for object in objects:
+            for obj in object.findall(f'.//{namespace}object'):
+                symbol_id = obj.get('symbol')
+                if symbol_id in symbols_lines:
+                    coords = obj.find(f'{namespace}coords').text.strip()
+                    coords = coords.split(";")  # Сначала разделяем по ";"
+                    coords = [coord.split(" ") for coord in coords]
+                    coords = helper_functions.fix_coordinates(coords)
+                    coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
+                    lines.append([coords_list])
 
         symbols_slope_lines = {}
         symbols_slope_lines.update(helper_functions.extract_symbols(root, self.availible_parce_slope_line_setting, namespace))
-
-        for obj in root.findall(f'.//{namespace}object'):
-            symbol_id = obj.get('symbol')
-            if symbol_id in symbols_slope_lines:
-                rotation = obj.get('rotation')
-                coords = obj.find(f'{namespace}coords').text.strip()
-                coords = coords.split(";")  # Сначала разделяем по ";"
-                coords = [coord.split(" ") for coord in coords]
-                coords = helper_functions.fix_coordinates(coords)
-                coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
-                slope_lines.append([coords_list, float(rotation)])
+        for object in objects:
+            for obj in object .findall(f'.//{namespace}object'):
+                symbol_id = obj.get('symbol')
+                if symbol_id in symbols_slope_lines:
+                    rotation = obj.get('rotation')
+                    coords = obj.find(f'{namespace}coords').text.strip()
+                    coords = coords.split(";")  # Сначала разделяем по ";"
+                    coords = [coord.split(" ") for coord in coords]
+                    coords = helper_functions.fix_coordinates(coords)
+                    coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
+                    slope_lines.append([coords_list, float(rotation)])
 
         return lines, slope_lines
 
@@ -750,7 +780,13 @@ class UHeightMapGenerator:
                 self.progress_delegate.invoke(
                     "fixing_lines_settings FixUnboarderLines : index = " + str(self.fix_line_index), int(k/len(self.lines)*100))
                 if (line.points[0] != line.points[-1]):
-                    if not self.border_polygon.contains(Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1])):
+                    check_unborder = False
+
+                    if(setting.fix_unborder_if_both_point_unborder):
+                        check_unborder = not self.border_polygon.contains(Point(line.points[0])) and not self.border_polygon.contains(Point(line.points[-1]))
+                    else:
+                        check_unborder = not self.border_polygon.contains(Point(line.points[0])) or not self.border_polygon.contains(Point(line.points[-1]))
+                    if check_unborder:
                         G = self.create_graph_from_polygon(self.max_border_polygon, setting.hight_find_direction)
 
                         projection_point, closest_segment =self.direction_from_point_to_polygon(self.max_border_polygon, line.points[0])
@@ -806,6 +842,7 @@ class UHeightMapGenerator:
             min_parent_area = 1000000000
             min_parent = None
             for uncheck_line in uncheck_lines:
+                if (check_line.shapely_polygon and uncheck_line.shapely_polygon):
                     if (check_line.evaluate_polygon_overlap(uncheck_line)>self.min_owner_overlap):
                         if check_line.shapely_polygon.area > uncheck_line.shapely_polygon.area:
                             last_parent = uncheck_line.parent
@@ -1027,13 +1064,20 @@ class UHeightMapGenerator:
 
         self.CheckErrorLines()
 
+        error_lines = self.GetAllErrorLines()
+        self.count_error_lines = len(error_lines)
+        self.error_lines_delegate.invoke(self.GetAllErrorLines())
+
         if(self.remove_all_error_lines):
             self.RemoveAllErrorLines()
+
         self.progress_delegate.invoke("All preparations are completed", 100)
 
 
     def FindOwnerLine(self, point, root_lines):
         for line in root_lines:
+            if(not line.shapely_polygon):
+                continue
             if(line.shapely_polygon.contains(point)):
                 if(len(line.childs)>0):
                     result = self.FindOwnerLine(point, line.childs)
@@ -1053,9 +1097,11 @@ class UHeightMapGenerator:
 
     def DrawPlotHeightMap(self):
         root_lines = line_library.GetRootLines(self.lines)
+        if(len(root_lines)<=0):
+            return
         min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(root_lines)
         print("Depth equal " + str(max_depth - min_depth))
-        image = Image.new("RGB",
+        image = Image.new("L",
                           (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)),
                           "black")
         draw = ImageDraw.Draw(image)
@@ -1063,77 +1109,50 @@ class UHeightMapGenerator:
         k = 0
         for y in range(int(self.height + self.first_level_distance)):
             for x in range(int(self.width + self.first_level_distance)):
-                helper_functions.print_progress_bar(k, int(self.height + self.first_level_distance) * int(
-                    self.width + self.first_level_distance))
                 self.progress_delegate.invoke("Generate Texture", int(k / (
                             int(self.height + self.first_level_distance) * int(
                         self.width + self.first_level_distance)) * 100))
                 point = Point(int(x + self.min_width - self.first_level_distance / 2),
                               int(y + self.min_height - self.first_level_distance / 2))
-                owner_line = None
-                intensity = -min_depth
-                if(self.use_octree_generated_heightmap_data):
-                    owner_line = self.FindOwnerLine(point, root_lines)
-                    intensity = intensity + self.CalculateOwnerLineDepth(owner_line)
 
-                else:
-                    min_poligin_length = 100000000000000
-                    for line in self.lines:
-                        if line.shapely_polygon.contains(point):
-                            if (line.slope_direction == "Outside"):
-                                intensity += 1
-                            elif (line.slope_direction == "Inside"):
-                                intensity -= 1
-                            else:
-                                intensity += 1
-                            if (min_poligin_length > line.shapely_polygon.length):
-                                min_poligin_length = line.shapely_polygon.length
-                                owner_line = line
-
-
+                owner_line = self.FindOwnerLine(point, root_lines)
+                intensity = -min_depth + self.CalculateOwnerLineDepth(owner_line)
 
                 if owner_line:
-                    distance_to_owner_poligon = point.distance(owner_line.shapely_polygon.exterior)
-                    sum_distance = 0
-                    for child in owner_line.childs:
-                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                        if (min_distance_to_child_poligon < self.first_level_distance):
-                            sum_distance += min_distance_to_child_poligon
-                    intensity_sum = 0.0
-                    percent_owner_control = clamp(1 - distance_to_owner_poligon / self.first_level_distance, 0, 1)
+                    tmp_points = []
+                    owner_line_point, closest_segment = self.direction_from_point_to_polygon(owner_line.shapely_polygon, [point.x, point.y])
+                    for child_line in owner_line.childs:
+                        if isinstance(child_line, int):
+                            print(child_line.childs)
+                            continue
+                        child_line_point, closest_segment = self.direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
+                        dist_to_point = child_line_point.distance(point)
+                        if(dist_to_point < self.first_level_distance):
+                            clamped_first_level_distance = clamp(self.first_level_distance,0, min(child_line_point.distance(owner_line_point),self.first_level_distance ))
+                            if child_line.slope_direction == "Outside":
+                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
+                            elif child_line.slope_direction == "Inside":
+                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity - 1])
+                            else:
+                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
+                    sum_points = 0.0
+                    for l_point in tmp_points:
+                        sum_points = sum_points + l_point[1]
+                    sum_weight = 0.0
+                    lerp_multiply = 1.0
+                    for l_point in tmp_points:
+                        lerp_multiply = lerp_multiply * l_point[1]
+                        sum_weight = sum_weight + l_point[1]/sum_points * l_point[2]
+                    intensity = lerp_multiply * intensity + (1 - lerp_multiply) * sum_weight
 
-                    if (distance_to_owner_poligon < self.first_level_distance):
-                        percent = distance_to_owner_poligon / self.first_level_distance
-                        if (owner_line.slope_direction == "Outside"):
-                            intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-                        elif (owner_line.slope_direction == "Inside"):
-                            intensity_sum -= distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-                        else:
-                            intensity_sum += distance_to_owner_poligon / self.first_level_distance * percent_owner_control
-
-                    if(sum_distance!= 0):
-                        for child in owner_line.childs:
-                            min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                            if (min_distance_to_child_poligon < self.first_level_distance):
-                                normalize_distance_to_child_poligon = clamp(
-                                    min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
-                                    (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
-                                if (child.slope_direction == "Outside"):
-                                    intensity_sum += normalize_distance_to_child_poligon
-                                elif (child.slope_direction == "Inside"):
-                                    intensity_sum -= normalize_distance_to_child_poligon
-                                else:
-                                    intensity_sum += normalize_distance_to_child_poligon
-
-                        intensity = intensity + intensity_sum
                 else:
-                    sum_distance = 0
+                    sum_distance = 0.0
                     for child in root_lines:
                         min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
                         if (min_distance_to_child_poligon < self.first_level_distance):
                             sum_distance += min_distance_to_child_poligon
                     intensity_sum = 0.0
-                    if(sum_distance!=0.0):
+                    if (sum_distance != 0.0):
                         for child in root_lines:
                             min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
                             if (min_distance_to_child_poligon < self.first_level_distance):
@@ -1148,8 +1167,8 @@ class UHeightMapGenerator:
                                     intensity_sum += normalize_distance_to_child_poligon
                         intensity = intensity + intensity_sum
 
-                white_intensity = min(255, int(intensity * 255 / (max_depth - min_depth)))
-                draw.point((int(x), int(y)), fill=(white_intensity, white_intensity, white_intensity))
+                white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
+                draw.point((int(x), int(y)), fill=white_intensity)
                 k = k + 1
         self.cook_image = image
         self.progress_delegate.invoke("Complete", 100)

@@ -2,60 +2,84 @@ import sys
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout,
     QLineEdit, QPushButton,
-    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem, QComboBox, QShortcut
+    QListWidget, QMessageBox, QScrollArea, QFormLayout, QSpinBox, QCheckBox, QHBoxLayout, QDoubleSpinBox, QLabel, QListWidgetItem, QComboBox, QShortcut, QSplitter
 )
 from PyQt5.QtGui import QKeySequence
-
+from PyQt5.QtWidgets import (
+    QWidget, QListWidget, QScrollArea, QFormLayout, QVBoxLayout,
+    QHBoxLayout, QPushButton, QSplitter, QSizePolicy
+)
+from PyQt5.QtCore import Qt
 
 class UArrayWidget(QWidget):
-    def __init__(self, settings_class, settings_list, font_size = 12.0):
+    def __init__(self, settings_class, settings_list, font_size=12.0):
         super().__init__()
         self.settings_class = settings_class
         self.param_widgets = []
         self.settings_list = settings_list
         self.unique_values = False
         self.font_size = font_size
-        self.initUI()
+
+        self._build_ui()
 
         for setting in settings_list:
             self.create_new_setting(setting)
 
-    def initUI(self):
-        layout = QVBoxLayout()
+    def _build_ui(self):
+        """Композиция виджетов со сплиттерами."""
+        root_splitter = QSplitter(Qt.Vertical, self)    # главный H‑splitter
 
-        # Список для отображения элементов Settings
+        # ─── Левая панель ───────────────────────────────────────────
         self.list_widget = QListWidget()
-        layout.addWidget(self.list_widget)
+        self.list_widget.setSizePolicy(QSizePolicy.MinimumExpanding,
+                                       QSizePolicy.Expanding)
+        root_splitter.addWidget(self.list_widget)
 
+        # ─── Правая (вертикальная) панель ───────────────────────────
+        right_splitter = QSplitter(Qt.Vertical)
+        root_splitter.addWidget(right_splitter)
+
+        # ----‑‑‑‑‑ Верх: прокручиваемая форма параметров -------------‑
         scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+
         scroll_content = QWidget()
         self.scroll_layout = QFormLayout(scroll_content)
-        scroll_area.setWidgetResizable(True)
+        self.generate_settings(self.scroll_layout)        # заполнение полей
+
         scroll_area.setWidget(scroll_content)
+        right_splitter.addWidget(scroll_area)
 
-        layout.addWidget(scroll_area)
-        # Поля для редактирования
-        self.generate_settings(self.scroll_layout)
+        # ----‑‑‑‑‑ Низ: кнопочная панель ----------------------------‑
+        button_box = QWidget()
+        button_layout = QHBoxLayout(button_box)
+        button_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Кнопки для управления
-        button_layout = QHBoxLayout()
+        add_btn = QPushButton("Add")
+        add_btn.clicked.connect(self.add_setting)
+        button_layout.addWidget(add_btn)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self.add_setting)
-        button_layout.addWidget(add_button)
+        edit_btn = QPushButton("Edit")
+        edit_btn.clicked.connect(self.bind_edit_settings)
+        button_layout.addWidget(edit_btn)
 
-        edit_button = QPushButton("Edit")
-        edit_button.clicked.connect(self.bind_edit_settings)
-        button_layout.addWidget(edit_button)
+        del_btn = QPushButton("Delete")
+        del_btn.clicked.connect(self.delete_setting)
+        button_layout.addWidget(del_btn)
 
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self.delete_setting)
-        button_layout.addWidget(delete_button)
+        right_splitter.addWidget(button_box)
 
-        layout.addLayout(button_layout)
-        self.setLayout(layout)
+        # ─── Финальная сборка ───────────────────────────────────────
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(root_splitter)
+        self.setLayout(main_layout)
 
+        # подключаем выбор в списке к загрузке параметров
         self.list_widget.currentRowChanged.connect(self.load_settings)
+
+        # стартовые размеры секций (можно менять на вкус)
+        root_splitter.setSizes([150, 400])
+        right_splitter.setSizes([300, 60])
 
 
     def update_options(self):

@@ -2,11 +2,12 @@ import helper_functions as helper_functions
 from shapely.geometry import Polygon
 import numpy as np
 import random
+from typing import Optional, Sequence
 
 class ULine:
     def __init__(self, seed, parent, childs, shapely_polygon, points):
-        self.parent = parent
-        self.childs = childs
+        self.parent: Optional[ULine] = parent
+        self.childs: list[ULine]  = childs
         self.shapely_polygon = shapely_polygon
         self.points = points.copy()
         self.start_points = points.copy()

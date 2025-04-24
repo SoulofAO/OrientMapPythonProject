@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QSlider, QVBoxLayout, QCheckBox,
-    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar, QShortcut, QLineEdit
+    QPushButton, QHBoxLayout, QFormLayout, QSpinBox, QFileDialog, QScrollArea, QDoubleSpinBox, QComboBox, QTreeWidget, QTreeWidgetItem, QProgressBar, QShortcut, QLineEdit, QSplitter
 )
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QImage, QPixmap
@@ -19,6 +19,7 @@ from Delegates import UDelegate
 
 class UHeightmapGenerationWarperThread(QThread):
     progress_signal = pyqtSignal(str, int)
+    error_lines_signal = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -31,9 +32,13 @@ class UHeightmapGenerationWarperThread(QThread):
     def set_heightmap_generator(self, heightmap_generator):
         self.settings = heightmap_generator
 
+    def call_update_error_lines_delegate(self, int):
+        self.error_lines_signal.emit(int)
+
     def run(self):
         if self.settings:
             self.settings.progress_delegate.add(self.call_update_percent_delegate)
+            self.settings.error_lines_delegate.add(self.call_update_error_lines_delegate)
             self.settings.MainLaunchOperations()
 
 
@@ -45,28 +50,41 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.param_widgets = [] #[[Name, Widget]]
         self.initUI()
 
+    def closeEvent(self, event):
+        self.ApplyAllVariableAndSave()
+        event.accept()
+
+
     def initUI(self):
         # Основной контейнер
-
-        central_widget = QWidget()
-        main_layout = QHBoxLayout()
-        central_widget.setLayout(main_layout)
+        main_splitter = QSplitter(Qt.Horizontal)
 
         # Левая часть с изображением и кнопками
-        left_layout = QVBoxLayout()
+        left_splitter = QSplitter(Qt.Vertical)
 
         # Label для отображения изображения
+        high_widget = QWidget()
+        high_layout = QHBoxLayout()
         self.draw_debug_lines_checkbox = QCheckBox()
         self.draw_debug_lines_checkbox.setText("Show Only Debug Lines")
         self.draw_debug_lines_checkbox.setChecked(True)
-        left_layout.addWidget(self.draw_debug_lines_checkbox)
+        high_layout.addWidget(self.draw_debug_lines_checkbox)
+
+        self.error_lines_counter = QLabel("")
+        self.error_lines_counter.setText("Error Lines Counter: 0")
+        high_layout.addWidget(self.error_lines_counter)
+
+        high_widget.setLayout(high_layout)
+
+        left_splitter.addWidget(high_widget)
 
         self.image_label = QLabel("Image Preview")
         #self.image_label.setFixedSize(400, 400)
         self.image_label.setStyleSheet("border: 1px solid black;")
         self.image_label.setAlignment(Qt.AlignCenter)
-        left_layout.addWidget(self.image_label)
+        left_splitter.addWidget(self.image_label)
 
+        progress_widget = QWidget()
         progress_layout = QHBoxLayout()
 
         self.progress_text = QLabel("")
@@ -76,13 +94,14 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.progress_bar.setGeometry(30, 40, 300, 25)  # Размер и положение прогресс-бара
         self.progress_bar.setMaximum(100)  # Устанавливаем максимальное значение
         progress_layout.addWidget(self.progress_bar)
+        progress_widget.setLayout(progress_layout)
 
-        left_layout.addLayout(progress_layout)
+        left_splitter.addWidget(progress_widget)
 
         self.tree_lines = QTreeWidget()
         self.tree_lines.setColumnCount(1)  # Указываем количество колонок
         self.tree_lines.setHeaderLabels(["Items"])  # Название колонки
-        left_layout.addWidget(self.tree_lines)
+        left_splitter.addWidget(self.tree_lines)
 
         self.load_button = QPushButton("Load File")
         self.reset_button = QPushButton("Reset Data")
@@ -91,18 +110,24 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.reset_button.clicked.connect(self.on_reset)
         self.apply_button.clicked.connect(self.on_apply)
 
-        left_layout.addWidget(self.load_button)
+        left_splitter.addWidget(self.load_button)
         self.loaded_status_text = QLabel("Loading Status")
-        left_layout.addWidget(self.loaded_status_text)
+        left_splitter.addWidget(self.loaded_status_text)
         self.UpdateLoadedStatusText()
 
-        left_layout.addWidget(self.reset_button)
-        left_layout.addWidget(self.apply_button)
-        # Добавляем левый блок в основной layout
-        main_layout.addLayout(left_layout)
+        left_splitter.addWidget(self.reset_button)
+        left_splitter.addWidget(self.apply_button)
 
-        # Правая часть - панель с параметрами
-        right_layout = QVBoxLayout()
+        spltter_stretch_factors = [1,20,1,2,2,2,2,2]
+        counter = 0
+        for spltter_stretch_factor in spltter_stretch_factors:
+            left_splitter.setStretchFactor(counter, spltter_stretch_factor)
+            counter +=1
+
+        main_splitter.addWidget(left_splitter)
+
+        right_splitter = QSplitter(Qt.Vertical)
+        right_splitter.setSizes([800, 800])
 
         # Прокручиваемая область для параметров
         scroll_area = QScrollArea()
@@ -116,26 +141,29 @@ class UHeightmapGeneratorUI(QMainWindow):
 
         # Добавляем прокручиваемую область на правую панель
         availible_parce_lines_text_label = QLabel("Recive Line")
-        right_layout.addWidget(availible_parce_lines_text_label)
+        right_splitter.addWidget(availible_parce_lines_text_label)
         availible_parce_lines_text_label.setAlignment(Qt.AlignCenter)
 
         self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_contour_line_settings)
-        right_layout.addWidget(self.availible_parce_lines_array)
+        right_splitter.addWidget(self.availible_parce_lines_array)
 
-        right_layout.addWidget(scroll_area)
+        right_splitter.addWidget(scroll_area)
 
+        fixing_line_layout = QVBoxLayout()
+        fixing_line_widget = QWidget()
+        fixing_line_widget.setLayout(fixing_line_layout)
+        right_splitter.addWidget(fixing_line_widget)
 
+        fixing_line_text_label = QLabel("Fixing Line")
+        fixing_line_layout.addWidget(fixing_line_text_label)
+        fixing_line_text_label.setAlignment(Qt.AlignCenter)
 
-        fixing_line_text_lable = QLabel("Fixing Line")
-        right_layout.addWidget(fixing_line_text_lable)
-        fixing_line_text_lable.setAlignment(Qt.AlignCenter)
-        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings, self.settings.fixing_lines_settings)
+        self.fix_line_settings_array = UIModulate.UArrayWidget(UFixingLinesSettings,
+                                                               self.settings.fixing_lines_settings)
+        fixing_line_layout.addWidget(self.fix_line_settings_array)
+        main_splitter.addWidget(right_splitter)
 
-        right_layout.addWidget(self.fix_line_settings_array)
-
-        main_layout.addLayout(right_layout)
-
-        self.setCentralWidget(central_widget)
+        self.setCentralWidget(main_splitter)
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
 
@@ -163,6 +191,10 @@ class UHeightmapGeneratorUI(QMainWindow):
         value = min(100,value)
         if(self.progress_bar):
             self.progress_bar.setValue(value)
+
+    @pyqtSlot(int)
+    def update_error_lines(self, value):
+        self.error_lines_counter.setText("Error Lines Counter:" + value)
 
     def UpdateLoadedStatusText(self):
         if(self.settings.file_path):
@@ -304,6 +336,7 @@ class UHeightmapGeneratorUI(QMainWindow):
             loaded_pixmap = QPixmap(save_path)
             self.image_label.setPixmap(loaded_pixmap)
             self.UpdateLines()
+            self.error_lines_counter.setText("Error Lines Counter:" + str(self.settings.count_error_lines))
             self.settings.end_cook_delegate.remove(self.on_image_cooked)
             playsound('Complete.wav')
 

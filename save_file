@@ -1,8 +1,8 @@
 {
-    "file_path": "C:/Users/sgsgg/Downloads/TestLesoparkV3.omap",
-    "global_scale_multiplier": 0.2,
-    "first_level_distance": 50,
-    "max_distance_to_border_polygon": 100,
+    "file_path": "C:/Users/sgsgg/Downloads/TestMapGeneratorV3.omap",
+    "global_scale_multiplier": 1.0,
+    "first_level_distance": 30,
+    "max_distance_to_border_polygon": 30,
     "draw_with_max_border_polygon": true,
     "remove_all_error_lines": false,
     "min_owner_overlap": 0.95,
@@ -11,19 +11,140 @@
     "max_distance_to_slope_line": 20,
     "use_octree_to_fix_line": false,
     "use_octree_to_recive_slope_line": true,
-    "use_octree_generated_heightmap_data": true,
     "blend_slope_line": true,
     "seed": 1,
     "fixing_lines_settings": [
         {
             "merge_point_value": 0,
-            "max_merge_line_value": 200,
+            "max_merge_line_value": 5,
             "border_distance": 0,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
             "regenerate_borders": true,
-            "max_angle": 90
+            "max_angle": 30,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 15,
+            "border_distance": 0,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 45,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 30,
+            "border_distance": 0,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 60,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 50,
+            "border_distance": 0,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 50,
+            "border_distance": 5,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 50,
+            "border_distance": 10,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 50,
+            "border_distance": 30,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 100,
+            "border_distance": 30,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 30,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 200,
+            "border_distance": 32,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": false,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 400,
+            "border_distance": 32,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": false,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 10000,
+            "border_distance": 32,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": false,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 360,
+            "fix_unborder_if_both_point_unborder": true
+        },
+        {
+            "merge_point_value": 0,
+            "max_merge_line_value": 10000,
+            "border_distance": 50,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 360,
+            "fix_unborder_if_both_point_unborder": false
         }
     ],
     "availible_parce_contour_line_settings": [
@@ -33,10 +154,6 @@
         },
         {
             "name": "Index contour",
-            "index": 1
-        },
-        {
-            "name": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
             "index": 1
         }
     ]
