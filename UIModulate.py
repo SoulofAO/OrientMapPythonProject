@@ -7,9 +7,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QWidget, QListWidget, QScrollArea, QFormLayout, QVBoxLayout,
-    QHBoxLayout, QPushButton, QSplitter, QSizePolicy
+    QHBoxLayout, QPushButton, QSplitter, QSizePolicy, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
 
 class UArrayWidget(QWidget):
     def __init__(self, settings_class, settings_list, font_size=12.0):
@@ -312,6 +313,79 @@ class UArrayWidget(QWidget):
             combobox_directions.setCurrentIndex(options.index(value))
         self.param_widgets.append([attr_name, combobox_directions])
         layout.addRow(attr_name, combobox_directions)
+
+
+class ImageViewer(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Внутренние элементы
+        self.view = _InternalGraphicsView()
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.view)
+        layout.setContentsMargins(0, 0, 0, 0)  # без отступов
+
+    def setPixmap(self, pixmap: QPixmap):
+        self.view.setPixmap(pixmap)
+
+    def clear(self):
+        self.view.clear()
+
+
+class _InternalGraphicsView(QGraphicsView):
+    def __init__(self):
+        super().__init__()
+
+        # Сцена и элементы
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        self.pixmap_item = None
+
+        # Параметры управления
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+
+        # Масштабирование
+        self.scale_factor = 1.15
+        self.current_scale = 1.0
+        self.min_scale = 0.2
+        self.max_scale = 5.0
+
+    def setPixmap(self, pixmap: QPixmap):
+        self.scene.clear()
+        self.pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.scene.addItem(self.pixmap_item)
+        self.resetTransform()
+        self.current_scale = 1.0
+
+    def clear(self):
+        self.scene.clear()
+        self.pixmap_item = None
+        self.resetTransform()
+        self.current_scale = 1.0
+
+    def wheelEvent(self, event):
+        zoom_in = event.angleDelta().y() > 0
+
+        if zoom_in:
+            if self.current_scale * self.scale_factor <= self.max_scale:
+                self.scale(self.scale_factor, self.scale_factor)
+                self.current_scale *= self.scale_factor
+        else:
+            if self.current_scale / self.scale_factor >= self.min_scale:
+                self.scale(1 / self.scale_factor, 1 / self.scale_factor)
+                self.current_scale /= self.scale_factor
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.setDragMode(QGraphicsView.NoDrag)
+        super().mouseReleaseEvent(event)
 
 
 

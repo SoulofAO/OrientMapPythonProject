@@ -99,18 +99,15 @@ def fix_coordinates(coordinates):
 
     return coordinates
 
+def normalize(v):
+    """Возвращает нормализованный (единичный) вектор v = (x, y)."""
+    mag = math.hypot(v[0], v[1])          # length = √(x² + y²)
+    if mag == 0:
+        raise ValueError("Нулевой вектор нельзя нормализовать")
+    return (v[0] / mag, v[1] / mag)
 
-def angle_between_vectors(v1, v2):
-    # Векторное произведение для нахождения угла между двумя векторами
-    dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-    magnitude_v1 = math.sqrt(v1[0] ** 2 + v1[1] ** 2)
-    magnitude_v2 = math.sqrt(v2[0] ** 2 + v2[1] ** 2)
+def angle_between_vectors(u1, u2):
+    """Угол между двумя 2‑D векторами в радианах."""
+    cos_angle = (u1[0] * u2[0] + u1[1] * u2[1])/(math.sqrt(u1[0]*u1[0] + u1[1]*u1[1]) * math.sqrt(u2[0]*u2[0] + u2[1]*u2[1]))
 
-    if magnitude_v1 == 0 or magnitude_v2 == 0:
-        return 0  # Защита от деления на ноль (можно изменить по необходимости)
-
-    cos_angle = dot_product / (magnitude_v1 * magnitude_v2)
-    # Ограничиваем значение косинуса для предотвращения ошибок из-за погрешностей
-    cos_angle = max(-1.0, min(1.0, cos_angle))
-
-    return math.acos(cos_angle)  # Возвращаем угол в радианах
+    return math.degrees(math.acos(cos_angle))

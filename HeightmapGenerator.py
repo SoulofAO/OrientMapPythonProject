@@ -103,6 +103,7 @@ class UFixingLinesSettings:
         self.merge_point_value = 0;
         self.max_merge_line_value = 200;
         self.max_angle = 90
+        self.enable_merge_with_self = True
 
         self.border_distance = 0;
         self.hight_find_direction = "both"
@@ -114,9 +115,11 @@ class UFixingLinesSettings:
         self.regenerate_borders = True
 
         self.save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle", "fix_unborder_if_both_point_unborder"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
+                         "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
         self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
-                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle", "fix_unborder_if_both_point_unborder"]
+                            "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
+                            "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
 
 
     def __str__(self):
@@ -161,7 +164,7 @@ class UHeightMapGenerator:
 
         # 4. Параметры обработки линий
         self.availible_parce_contour_line_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
-        self.availible_parce_slope_line_setting = "Slope line, contour"
+        self.availible_parce_slope_line_setting = "Slope line, contour", "Index contour", "Slope line, index contour"
 
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
@@ -689,12 +692,11 @@ class UHeightMapGenerator:
                     optimal_start_point_to_merge_index = -1
                     optimal_end_point_to_merge_index = -1
 
-                    # Проверка минимального расстояния между первой и последней точками самой линии
-                    self_distance = (line.points[0][0] - line.points[-1][0]) ** 2 + (line.points[0][1] - line.points[-1][1]) ** 2
-
-                    if self_distance < optimal_line_const and self_distance < setting.max_merge_line_value:
-                        optimal_line_const = self_distance
-                        optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
+                    if(setting.enable_merge_with_self):
+                        self_distance = Point(line.points[0]).distance(Point(line.points[-1]))
+                        if self_distance < optimal_line_const and self_distance < setting.max_merge_line_value:
+                            optimal_line_const = self_distance
+                            optimal_line_to_merge_index = -2  # Особая отметка, что линия замыкает сама себя
 
                     # Поиск оптимальной линии для слияния
                     k = 0
@@ -706,32 +708,36 @@ class UHeightMapGenerator:
                         if test_line.points[0] != test_line.points[-1]:
 
                             point_pairs = [
-                                (0, 0),  # line.points[0] и test_line.points[0]
-                                (0, -1),  # line.points[0] и test_line.points[-1]
-                                (-1, -1),  # line.points[-1] и test_line.points[-1]
-                                (-1, 0),  # line.points[-1] и test_line.points[0]
+                                (0, 1, 0, 1),  # line.points[0] и test_line.points[0]
+                                (0, 1, -1, -2),  # line.points[0] и test_line.points[-1]
+                                (-1, -2 , -1, -2),  # line.points[-1] и test_line.points[-1]
+                                (-1,-2, 0, 1),  # line.points[-1] и test_line.points[0]
                             ]
-                            for i1, i2 in point_pairs:
+                            for i1, i2, i3, i4 in point_pairs:
                                 try:
                                     p11 = line.points[i1]
-                                    p12 = line.points[i1 + 1]
-                                    p21 = test_line.points[len(test_line.points) - 1]
-                                    p22 = test_line.points[len(test_line.points) - 2]
+                                    p12 = line.points[i2]
+                                    p21 = test_line.points[i3]
+                                    p22 = test_line.points[i4]
 
                                     if self.border_polygon.contains(Point(p11)) and self.border_polygon.contains(
                                             Point(p12)):
-                                        test_distance = (p12[0] - p11[0]) ** 2 + (p12[1] - p11[1]) ** 2
+                                        test_distance = Point(p11).distance(Point(p21))
                                         if test_distance < optimal_line_const and test_distance < setting.max_merge_line_value:
-                                            v1 = (p12[0] - p11[0], p12[1] - p11[1])
-                                            v2 = (p22[0] - p21[0], p22[1] - p21[1])
-                                            angle = angle_between_vectors(v1, v2)
-                                            if angle < setting.max_angle:
+                                            v1 = (p11[0] - p21[0], p11[1] - p21[1])
+                                            v2 = (p12[0] - p11[0], p12[1] - p11[1])
+                                            v3 = (p22[0] - p21[0], p22[1] - p21[1])
+                                            angle_first = helper_functions.angle_between_vectors(v1, v2)
+                                            if(angle_first>90):
+                                                angle_first = 180 - angle_first
+                                            angle_second = helper_functions.angle_between_vectors(v1, v3)
+                                            if(angle_second>90):
+                                                angle_second = 180 - angle_second
+                                            if angle_first < setting.max_angle and angle_second < setting.max_angle:
                                                 optimal_line_const = test_distance
                                                 optimal_line_to_merge_index = k
-                                                optimal_start_point_to_merge_index = i1 if i1 >= 0 else len(
-                                                    line.points) + i1
-                                                optimal_end_point_to_merge_index = i2 if i2 >= 0 else len(
-                                                    test_line.points) + i2
+                                                optimal_start_point_to_merge_index = i1
+                                                optimal_end_point_to_merge_index = i3
                                 except Exception as e:
                                     print("Wrong Geometry:", e)
                         k += 1
@@ -748,14 +754,13 @@ class UHeightMapGenerator:
                         if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
                             line.points =  line_to_merge.points[::-1] + line.points
                             line.start_points = line_to_merge.start_points[::-1] + line.start_points
-                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
+                        elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == - 1:
                             line.points = line_to_merge.points + line.points
                             line.start_points = line.start_points + line_to_merge.start_points[::-1]
-                        elif optimal_start_point_to_merge_index == (len(
-                                line.points) - 1) and optimal_end_point_to_merge_index == (len(line_to_merge.points) - 1):
+                        elif optimal_start_point_to_merge_index == - 1 and optimal_end_point_to_merge_index == - 1:
                             line.points = line.points + line_to_merge.points[::-1]
                             line.start_points = line.start_points + line_to_merge.start_points[::-1]
-                        elif optimal_start_point_to_merge_index == (len(line.points) - 1) and optimal_end_point_to_merge_index == 0:
+                        elif optimal_start_point_to_merge_index == -1 and optimal_end_point_to_merge_index == 0:
                             line.points = line.points + line_to_merge.points
                             line.start_points = line.start_points + line_to_merge.start_points
 
@@ -1128,7 +1133,7 @@ class UHeightMapGenerator:
                         child_line_point, closest_segment = self.direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
                         dist_to_point = child_line_point.distance(point)
                         if(dist_to_point < self.first_level_distance):
-                            clamped_first_level_distance = clamp(self.first_level_distance,0, min(child_line_point.distance(owner_line_point),self.first_level_distance ))
+                            clamped_first_level_distance = clamp(self.first_level_distance, 1, min(child_line_point.distance(owner_line_point),self.first_level_distance ))
                             if child_line.slope_direction == "Outside":
                                 tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
                             elif child_line.slope_direction == "Inside":
