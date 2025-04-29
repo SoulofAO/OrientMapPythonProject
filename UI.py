@@ -20,6 +20,7 @@ from Delegates import UDelegate
 class UHeightmapGenerationWarperThread(QThread):
     progress_signal = pyqtSignal(str, int)
     error_lines_signal = pyqtSignal(int)
+    end_cook_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -35,10 +36,17 @@ class UHeightmapGenerationWarperThread(QThread):
     def call_update_error_lines_delegate(self, int):
         self.error_lines_signal.emit(int)
 
+    def call_end_cook_delegate(self):
+        self.end_cook_signal.emit()
+
     def run(self):
         if self.settings:
+            self.settings.progress_delegate.remove(self.call_update_percent_delegate)
             self.settings.progress_delegate.add(self.call_update_percent_delegate)
+            self.settings.error_lines_delegate.remove(self.call_update_error_lines_delegate)
             self.settings.error_lines_delegate.add(self.call_update_error_lines_delegate)
+            self.settings.end_cook_delegate.remove(self.call_end_cook_delegate)
+            self.settings.end_cook_delegate.add(self.call_end_cook_delegate)
             self.settings.MainLaunchOperations()
 
 
@@ -78,10 +86,8 @@ class UHeightmapGeneratorUI(QMainWindow):
 
         left_splitter.addWidget(high_widget)
 
-        self.image_label = QLabel("Image Preview")
+        self.image_label = UIModulate.UImageViewer()
         #self.image_label.setFixedSize(400, 400)
-        self.image_label.setStyleSheet("border: 1px solid black;")
-        self.image_label.setAlignment(Qt.AlignCenter)
         left_splitter.addWidget(self.image_label)
 
         progress_widget = QWidget()
@@ -167,23 +173,9 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.setWindowTitle("Heightmap Generator")
         self.resize(800, 600)
 
-        self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
-        self.delete_shortcut.activated.connect(self.delete_key_event)
-
-        self.apply_shortcut = QShortcut(QKeySequence(Qt.Key_Return), self)
-        self.apply_shortcut.activated.connect(self.apply_key_event)
-
         self.fix_line_settings_array.setFocus()
 
         self.thread_warper = UHeightmapGenerationWarperThread()
-
-    def delete_key_event(self):
-        self.availible_parce_lines_array.key_delete_setting()
-        self.fix_line_settings_array.key_delete_setting()
-
-    def apply_key_event(self):
-        self.availible_parce_lines_array.apply_key_event()
-        self.fix_line_settings_array.apply_key_event()
 
     @pyqtSlot(str, int)
     def update_progress_bar(self, text, value):
@@ -229,7 +221,7 @@ class UHeightmapGeneratorUI(QMainWindow):
 
     def UpdateLines(self):
         self.tree_lines.clear()
-        root_lines = line.GetRootLines(self.settings.lines)
+        root_lines = line.GetRootLines(self.settings.lines["Contour"])
         for root_line in root_lines:
             self.AddAllChildLines(root_line, None)
 
@@ -329,6 +321,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.save_settings_to_file("save_file")
         print("Параметры обновлены:", vars(self.settings))
 
+    @pyqtSlot()
     def on_image_cooked(self):
         if (self.settings.cook_image):
             save_path = "output_image.png"  # или другой путь и имя файла
@@ -337,7 +330,6 @@ class UHeightmapGeneratorUI(QMainWindow):
             self.image_label.setPixmap(loaded_pixmap)
             self.UpdateLines()
             self.error_lines_counter.setText("Error Lines Counter:" + str(self.settings.count_error_lines))
-            self.settings.end_cook_delegate.remove(self.on_image_cooked)
             playsound('Complete.wav')
 
 
@@ -345,8 +337,19 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.ApplyAllVariableAndSave()
         if(self.settings.file_path and os.path.exists(self.settings.file_path)):
             self.settings.draw_debug_lines = self.draw_debug_lines_checkbox.isChecked()
-            self.settings.end_cook_delegate.add(self.on_image_cooked)
+
+            try:
+                self.thread_warper.progress_signal.disconnect(self.update_progress_bar)
+            except TypeError:
+                pass
+
+            try:
+                self.thread_warper.end_cook_signal.disconnect(self.on_image_cooked)
+            except TypeError:
+                pass
             self.thread_warper.progress_signal.connect(self.update_progress_bar)
+            self.thread_warper.end_cook_signal.connect(self.on_image_cooked)
+
             self.thread_warper.set_heightmap_generator(self.settings)
             self.thread_warper.start()
 

@@ -17,22 +17,23 @@ from Octree import Octree, OctreeNode
 from enum import Enum
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from shapely.ops import nearest_points
-
+from typing import Optional, Sequence, Dict, List
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
 
-def set_options_to_availible_parce_line_settings(new_options):
-    for default_option in UAvailibleParceLineSettings.default_options:
-        if (not default_option in new_options):
-            new_options.append(default_option)
-    UAvailibleParceLineSettings.options = new_options
-    UAvailibleParceLineSettings.update_name_options_delegate.invoke()
+
+type_option = ["Contour", "Slope line", "Water"]
 
 class UAvailibleParceLineSettings:
-    options = ["Contour", "Index contour", "ErrorType"]
-    default_options = ["Contour", "Index contour", "ErrorType"]
-    update_name_options_delegate = Delegates.UDelegate()
+    def __init__(self, name = "string", type = "Contour", index = 1):
+        self.name = name
+        self.type = type
+        self.type_option = type_option
+        self.index = index
+
+        self.ui_show_tag = ["name", "index", "type"]
+        self.save_tag = ["name", "index", "type"]
 
     def __eq__(self, other):
         if(other):
@@ -40,23 +41,11 @@ class UAvailibleParceLineSettings:
         else:
             return False
 
-    def update_options_by_global_options(self):
-        self.name_options = UAvailibleParceLineSettings.options
-        self.update_name_options_delegate.invoke()
-
-    def __init__(self, name = "string", index = 1):
-        self.name = name
-        self.name_options = UAvailibleParceLineSettings.options
-        self.index = index
-
-        self.ui_show_tag = ["name", "index"]
-        self.save_tag = ["name", "index"]
-
     def __str__(self):
         string = ""
         for attr_name in self.ui_show_tag:
-            string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
-        return f"{self.name}: {string}"
+            string = string + attr_name + " = " + str(getattr(self, attr_name)) + ", "
+        return f"{string}"
 
     def to_dict(self):
         """Сериализуем только параметры, указанные в save_tag."""
@@ -125,8 +114,8 @@ class UFixingLinesSettings:
     def __str__(self):
         string = ""
         for attr_name in self.ui_show_tag:
-            string = string + ", " + attr_name + " = " + str(getattr(self, attr_name))
-        return f"{self.name}: {string}"
+            string = string + attr_name + " = " + str(getattr(self, attr_name)) + ","
+        return string
 
     def to_dict(self):
         """Сериализуем только параметры, указанные в save_tag."""
@@ -163,9 +152,34 @@ class UHeightMapGenerator:
         self.cook_image = None  # Изображение для отладки или вывода
 
         # 4. Параметры обработки линий
-        self.availible_parce_contour_line_settings = [UAvailibleParceLineSettings("Contour",1),UAvailibleParceLineSettings("Index contour",1)]  # Доступные данные для парсинга
-        self.availible_parce_slope_line_setting = "Slope line, contour", "Index contour", "Slope line, index contour"
-
+        self.availible_parce_contour_line_settings = [UAvailibleParceLineSettings("Contour","Contour", 1),
+                                                      UAvailibleParceLineSettings("Index contour","Contour", 1),
+                                                      UAvailibleParceLineSettings("Slope line, contour",  "Slope line", 1),
+                                                      UAvailibleParceLineSettings("Index contour", "Slope line", 1),
+                                                      UAvailibleParceLineSettings("Slope line, index contour", "Slope line", 1),
+                                                      UAvailibleParceLineSettings("Uncrossable body of water (full colour), with bank line", "Water", 1),
+                                                      UAvailibleParceLineSettings("Uncrossable body of water (dominant), with bank line", "Water", 1),
+                                                      UAvailibleParceLineSettings("Uncrossable body of water (dominant)", "Water", 1),
+                                                      UAvailibleParceLineSettings("Shallow body of water, with solid outline", "Water", 1),
+                                                      UAvailibleParceLineSettings("Shallow body of water", "Water", 1),
+                                                      UAvailibleParceLineSettings("Shallow body of water, solid outline", "Water", 1),
+                                                      UAvailibleParceLineSettings("Shallow body of water, dashed outline", "Water", 1),
+                                                      UAvailibleParceLineSettings("Small shallow body of water (full colour)", "Water", 1),
+                                                      UAvailibleParceLineSettings("Crossable watercourse", "Water", 1),
+                                                      UAvailibleParceLineSettings("Small crossable watercourse", "Water", 1),
+                                                      UAvailibleParceLineSettings("Minor/seasonal water channel", "Water", 1),
+                                                      UAvailibleParceLineSettings("Uncrossable marsh, with outline", "Water", 1),
+                                                      UAvailibleParceLineSettings("Uncrossable marsh", "Water", 1),
+                                                      UAvailibleParceLineSettings("Marsh", "Water", 1),
+                                                      UAvailibleParceLineSettings("Narrow marsh", "Water", 1),
+                                                      UAvailibleParceLineSettings("Waterhole", "Water", 1),
+                                                      UAvailibleParceLineSettings("Marsh, minimum size", "Water", 1),
+                                                      UAvailibleParceLineSettings("Indistinct marsh", "Water", 1),
+                                                      UAvailibleParceLineSettings("Indistinct marsh, minimum size", "Water", 1),
+                                                      UAvailibleParceLineSettings("Well, fountain or water tank", "Water", 1),
+                                                      UAvailibleParceLineSettings("Spring", "Water", 1),
+                                                      UAvailibleParceLineSettings("Prominent water feature", "Water", 1)
+                                                      ]
         self.first_level_distance = 50  # Расстояние первого уровня (между линиями контура)
         self.remove_all_error_lines = False  # Удаление всех ошибочных линий
         self.min_owner_overlap = 0.95
@@ -173,15 +187,20 @@ class UHeightMapGenerator:
         self.use_octree_to_fix_line = False
         self.use_octree_to_recive_slope_line = True
         self.blend_slope_line = True
+        self.guess_slope_direction_by_rivers = True
+        self.guess_slope_direction_by_rivers_range = 50
+        self.guess_slope_direction_by_contour_line_angle = True
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
-        self.lines = []  # Линии, которые будут обрабатываться
-        self.octree_for_lines = None
+        self.lines: Dict[str, List[line.ULine]] = {}  # Линии, которые будут обрабатываться
+        for type in type_option:
+            self.lines[type] = []
+        self.octree_for_lines: Optional[Octree] = None
 
         # 5. Прочие настройки и делегаты
-        self.border_polygon = None  # Полигон границы
-        self.max_border_polygon = None  # Максимальный полигон границы
-        self.end_cook_delegate = Delegates.UDelegate()  # Делегат для завершея
+        self.border_polygon = None
+        self.max_border_polygon = None
+        self.end_cook_delegate = Delegates.UDelegate()
         self.progress_delegate = Delegates.UDelegate()
         self.error_lines_delegate = Delegates.UDelegate()
         self.fix_line_index = 0;
@@ -191,12 +210,12 @@ class UHeightMapGenerator:
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                          'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                         'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed']
+                         'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed', 'guess_slope_direction_by_rivers', 'guess_slope_direction_by_contour_line_angle']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
-                            'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed']
+                            'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed', 'guess_slope_direction_by_rivers', 'guess_slope_direction_by_contour_line_angle']
 
 
 
@@ -262,16 +281,6 @@ class UHeightMapGenerator:
                 symbols_lines.update(
                     helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
 
-            for symbol in symbols_lines.keys():
-                print(symbol)
-                if (not symbol in options):
-                    options.append(symbols_lines.get(symbol))
-            set_options_to_availible_parce_line_settings(options)
-            for option in self.availible_parce_contour_line_settings:
-                if (option):
-                    option.update_options_by_global_options()
-
-
         elif file_extension == "bna":
             data = helper_functions.ReadFile(self.__file_path)
             for line in data.splitlines():
@@ -299,55 +308,58 @@ class UHeightMapGenerator:
 
         namespace = helper_functions.get_namespace(root)
 
-        lines = []
-        slope_lines = []
+        lines_by_type = {}
+        symbols_by_type = {}
+        for type in type_option:
+            lines_by_type[type] = []
+            symbols_by_type[type] = []
 
-        symbols_lines = {}
-        for available_parce_contour_line in self.availible_parce_contour_line_settings:
-            symbols_lines.update(helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
+        for available_parce_line in self.availible_parce_contour_line_settings:
+            ID = helper_functions.extract_symbols(root, available_parce_line.name, namespace)
+            symbols_by_type[available_parce_line.type].append(ID)
 
         objects = root.findall(f'.//{namespace}objects')
         for object in objects:
             for obj in object.findall(f'.//{namespace}object'):
                 symbol_id = obj.get('symbol')
-                if symbol_id in symbols_lines:
-                    coords = obj.find(f'{namespace}coords').text.strip()
-                    coords = coords.split(";")  # Сначала разделяем по ";"
-                    coords = [coord.split(" ") for coord in coords]
+                sucsess_simbol = False
+                sucsess_type = "None"
+                for type in type_option:
+                    for simbol in symbols_by_type[type]:
+                        if symbol_id in simbol:
+                            sucsess_simbol = True
+                            sucsess_type = type
+                            break
+                if sucsess_simbol:
+                    coords_element = obj.find(f'{namespace}coords')
+                    if coords_element is None:
+                        continue
+                    coords = coords_element.text.strip()
+                    coords = [coord.split(" ") for coord in coords.split(";")]
                     coords = helper_functions.fix_coordinates(coords)
-                    coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
-                    lines.append([coords_list])
+                    coords_list = [[float(coord[0]) / 100 * self.global_scale_multiplier,
+                                    float(coord[1]) / 100 * self.global_scale_multiplier] for coord in coords]
+                    rotation = 0.0
+                    if(obj.get('rotation') != None):
+                        rotation = obj.get('rotation')
+                    lines_by_type[sucsess_type].append({"coords_list" : coords_list, 'rotation': rotation})
 
-        symbols_slope_lines = {}
-        symbols_slope_lines.update(helper_functions.extract_symbols(root, self.availible_parce_slope_line_setting, namespace))
-        for object in objects:
-            for obj in object .findall(f'.//{namespace}object'):
-                symbol_id = obj.get('symbol')
-                if symbol_id in symbols_slope_lines:
-                    rotation = obj.get('rotation')
-                    coords = obj.find(f'{namespace}coords').text.strip()
-                    coords = coords.split(";")  # Сначала разделяем по ";"
-                    coords = [coord.split(" ") for coord in coords]
-                    coords = helper_functions.fix_coordinates(coords)
-                    coords_list = [[float(coord[0])/ 100 * self.global_scale_multiplier, float(coord[1])/ 100 * self.global_scale_multiplier] for coord in coords]
-                    slope_lines.append([coords_list, float(rotation)])
-
-        return lines, slope_lines
+        return lines_by_type
 
     def ImportNewFile(self):
         file_extension = self.file_path.split('.')[-1]
         if file_extension == "omap":
-            data_lines, data_slope_lines = self.parse_omap_hml()
-            return data_lines, data_slope_lines
+            lines_by_type  = self.parse_omap_hml()
+            return lines_by_type
         elif file_extension == "bna":
             data = helper_functions.ReadFile(self.file_path)
             data_lines = self.ParseAllFromData(data)
-            return data_lines, None
+            return data_lines
         elif file_extension == "ocd":
-            return None, None
+            return None
         else:
             print("Неизвестный тип файла")
-            return None, None
+            return None
 
     def ParseAllFromData(self, data):
         lines = []
@@ -379,9 +391,14 @@ class UHeightMapGenerator:
             Generated Border By Lines inside.
         """
         points = []
-        for line in self.lines:
-            for segment in line.start_points:
-                points.append(segment)
+        try:
+            for line in self.lines["Contour"]:
+                for segment in line.start_points:
+                    points.append(segment)
+        except:
+            print("")
+
+
 
         points = np.array(points)
 
@@ -441,8 +458,12 @@ class UHeightMapGenerator:
 
         return min_x, min_y, max_x, max_y
 
-    def SetupSizeDataFromLines(self, lines_coords):
-        coords = [coord for line in lines_coords for coord in line]
+    def SetupSizeDataFromLines(self, lines_by_type):
+        coords = []
+        for type in lines_by_type:
+            for line in lines_by_type[type]:
+                for coord in line["coords_list"]:
+                    coords.append(coord)
 
         self.min_width = min(coord[0] for coord in coords)
         self.max_width = max(coord[0] for coord in coords)
@@ -458,22 +479,26 @@ class UHeightMapGenerator:
         draw.line(coords, fill=color, width=width)
 
     def draw_lines(self, draw, lines, offset_x, offset_y):
-        for line in lines:
-            if len(line.points) >= 2:  # Проверяем, что есть как минимум две точки для рисования линии
+        for line in lines["Contour"]:
+            if len(line.points) >= 2:
                 flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
                 if(self.draw_with_slope_line_color):
                     if line.slope_direction == "None":
-                        color = (255, 255, 255)  # Белый для None
+                        color = (255, 255, 255)
                     elif line.slope_direction == "Inside":
-                        color = (0, 255, 0)  # Зеленый для Inside
+                        color = (0, 255, 0)
                     elif line.slope_direction == "Outside":
-                        color = (255, 0, 0)  # Красный для Outside
+                        color = (255, 0, 0)
                     else:
                         color = (0, 0, 255)
                     draw.line(flat_coords, fill=color, width=2)
                 else:
                     color = (line.color[0], line.color[1], line.color[2])
                     draw.line(flat_coords, fill=(line.color[0], line.color[1], line.color[2]), width=2)
+        for line in lines["Water"]:
+            if len(line.points) >= 2:
+                flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
+                draw.line(flat_coords, fill=(0, 46, 255), width=2)
 
     def DebugDrawLines(self, lines):
         if(self.draw_with_max_border_polygon):
@@ -643,35 +668,15 @@ class UHeightMapGenerator:
         """
         return [G.nodes[i]['coord'] for i in path]
 
-    def GenerateLinesByLineData(self,lines_data, slope_lines_data):
-        lines_coords = []
-        for line_data in lines_data:
-            updated_coords = []
-            for coord in line_data[0]:
-                x = coord[0]
-                y = coord[1]
-                updated_coords.append([x,y])
-            lines_coords.append(updated_coords)
-
-        slope_lines_coords = []
-        if(slope_lines_data):
-            for slope_line_data in slope_lines_data:
-                updated_coords = []
-                for coord in slope_line_data[0]:
-                    x = coord[0]
-                    y = coord[1]
-                    updated_coords.append([x,y])
-                slope_lines_coords.append([updated_coords,slope_line_data[1]])
-        #Сегмент устарел. Нужен был из за часто возникающего бага в исходных данных.
-
-        self.SetupSizeDataFromLines(lines_coords)
-        return self.GeneratedLineByCoords(lines_coords, slope_lines_coords)
+    def GenerateLinesByLineData(self,lines_by_type):
+        self.SetupSizeDataFromLines(lines_by_type)
+        return self.GeneratedLineByCoords(lines_by_type)
 
     def FixMergeNearLines(self, setting:UFixingLinesSettings):
 
         if(setting.apply_merge_line_value):
             answer_lines = []
-            availible_lines = self.lines.copy()
+            availible_lines = self.lines["Contour"].copy()
 
             count = 0
             while len(availible_lines) >= 1:
@@ -771,7 +776,7 @@ class UHeightMapGenerator:
 
             if availible_lines:
                 answer_lines.append(availible_lines[0])
-            self.lines = answer_lines
+            self.lines["Contour"] = answer_lines
 
             return answer_lines
         else:
@@ -780,10 +785,10 @@ class UHeightMapGenerator:
     def FixUnboarderLines(self, setting:UFixingLinesSettings):
         if(setting.apply_fix_unborder_lines):
             k = 0
-            for line in self.lines:
+            for line in self.lines["Contour"]:
                 k = k + 1
                 self.progress_delegate.invoke(
-                    "fixing_lines_settings FixUnboarderLines : index = " + str(self.fix_line_index), int(k/len(self.lines)*100))
+                    "fixing_lines_settings FixUnboarderLines : index = " + str(self.fix_line_index), int(k/len(self.lines["Contour"])*100))
                 if (line.points[0] != line.points[-1]):
                     check_unborder = False
 
@@ -821,27 +826,28 @@ class UHeightMapGenerator:
                         print("Warning- Border non closest line" + str(line))
 
     def CheckErrorLines(self):
-        for line in self.lines:
-            if(line.points[0] == line.points[-1]) and line.CheckLineNumberPoint():
+        for line in self.lines["Contour"]:
+            if(line.IsLineClose()) and line.CheckLineNumberPoint():
                 line.correct_line =True
             else:
                 line.correct_line = False
 
     def GeneratedOctree(self):
         self.octree_for_lines = Octree(boundary=(self.min_width, self.min_height, self.max_width, self.max_height), capacity=4)
-        for line in self.lines:
+        for line in self.lines["Contour"]:
             self.octree_for_lines.insert(line)
+
 
     def GeneratedNestingOfLines(self):
         """ Сама идея очень проста - мы перебираем все элементы последовательно, удаляя пройденный элемент.
          Поскольку проейденые элементы больше не прокручиваются, кода настолько много - выбирается как себе parent, так и предположительные Child.
          Проверки работают на случай косяка предыдуших этапов.
         """
-        uncheck_lines = self.lines.copy()
+        uncheck_lines = self.lines["Contour"].copy()
         k = 0
         while len(uncheck_lines) > 0:
             k = k + 1
-            self.progress_delegate.invoke("generated_neasting_of_lines", int(k/len(self.lines)*100))
+            self.progress_delegate.invoke("generated_neasting_of_lines", int(k/len(self.lines["Contour"])*100))
             check_line = uncheck_lines[0]
             uncheck_lines.remove(check_line)
             min_parent_area = 1000000000
@@ -878,7 +884,7 @@ class UHeightMapGenerator:
 
     def GetAllErrorLines(self):
         error_lines = []
-        for line in self.lines:
+        for line in self.lines["Contour"]:
             if(line.correct_line == False):
                 error_lines.append(line)
         return error_lines
@@ -886,7 +892,7 @@ class UHeightMapGenerator:
     def RemoveAllErrorLines(self):
         error_lines = self.GetAllErrorLines()
         for error_line in error_lines:
-            self.lines.remove(error_line)
+            self.lines["Contour"].remove(error_line)
 
     def get_normal_from_segment(self, closest_segment, polygon):
         """
@@ -926,14 +932,14 @@ class UHeightMapGenerator:
         return normal_vector
 
 
-    def GeneratedSlopeDirectionEvent(self, slope_lines_coords):
+    def GeneratedSlopeDirectionEvent(self):
         if(self.use_octree_to_recive_slope_line):
             k = 0
-            for slope_line_coord in slope_lines_coords:
+            for slope_line_coord in self.lines["Slope line"]:
                 k = k + 1
-                self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", int(k / len(slope_lines_coords) * 100))
-                coord = slope_line_coord[0][0]
-                rotation = slope_line_coord[1]
+                self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", int(k / len(self.lines["Slope line"]) * 100))
+                coord = slope_line_coord.points[0]
+                rotation = slope_line_coord.rotation
                 closed_line, dist = self.octree_for_lines.nearest_neighbor_in_range(coord, self.max_distance_to_slope_line)
                 if(closed_line):
                     projection_point, closest_segment = self.direction_from_point_to_polygon(
@@ -954,14 +960,14 @@ class UHeightMapGenerator:
                         closed_line.slope_direction = "Inside"
         else:
             k = 0
-            for slope_line_coord in slope_lines_coords:
+            for slope_line_coord in self.lines["Slope line"]:
                 k = k + 1
-                self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", int(k/len(slope_lines_coords)*100))
+                self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", int(k/len(self.lines["Slope line"])*100))
                 min_distance = self.max_distance_to_slope_line;
                 closed_line = None
-                rotation = slope_line_coord[1]
-                coord = slope_line_coord[0][0]
-                for line in self.lines:
+                coord = slope_line_coord.points[0]
+                rotation = slope_line_coord.rotation
+                for line in self.lines["Contour"]:
                     if(line.slope_direction =="None"):
                         projection_point, closest_segment = self.direction_from_point_to_polygon(line.shapely_polygon, coord)
                         if(min_distance>((projection_point.x - coord[0])**2 + (projection_point.y - coord[1])**2)):
@@ -983,9 +989,35 @@ class UHeightMapGenerator:
                         closed_line.slope_direction = "Outside"# Красный для Outside
                     else:
                         closed_line.slope_direction = "Inside" # Зеленый для Inside
+        if self.guess_slope_direction_by_rivers:
+
+            error_lines = [{"line": line, "counter": 0} for line in self.lines["Contour"] if line.slope_direction == "None"]
+            counter = 0
+            for water_line in self.lines["Water"]:
+                min_range, max_range = water_line.GetRange()
+                min_range[0] = min_range[0] - self.guess_slope_direction_by_rivers_range
+                min_range[1] = min_range[1] - self.guess_slope_direction_by_rivers_range
+                max_range[0] = max_range[0] + self.guess_slope_direction_by_rivers_range
+                max_range[1] = max_range[1] + self.guess_slope_direction_by_rivers_range
+
+                near_counter_lines : List[line_library.ULine] = self.octree_for_lines.query([min_range[0],min_range[1], max_range[0],max_range[1]])
+                error_lines = [line for line in near_counter_lines if line.slope_direction == "None"]
+
+                if(water_line.IsLineClose()):
+                    for error_line in error_lines:
+                        if (error_line.shapely_polygon and water_line.shapely_polygon):
+                            sucsess = (error_line.evaluate_polygon_overlap(water_line) > self.min_owner_overlap) and (error_line.shapely_polygon.area > water_line.shapely_polygon.area)
+                            if (sucsess):
+                                error_line.slope_direction = "Inside"
+                            else:
+                                error_line.slope_direction = "Outside"
+                else:
+                    for error_line in error_lines:
+                        error_line =
+
 
         if self.blend_slope_line:
-            error_lines = [{"line": line, "counter": 0} for line in self.lines if line.slope_direction == "None"]
+            error_lines = [{"line": line, "counter": 0} for line in self.lines["Contour"] if line.slope_direction == "None"]
             counter = 0
 
             while error_lines:
@@ -1036,13 +1068,13 @@ class UHeightMapGenerator:
                     item["counter"] += 1
                     counter += 1
 
-    def GeneratedLineByCoords(self, lines_coords, slope_lines_coords):
-        self.lines = []
 
-        for line in lines_coords:
-            new_line = line_library.ULine(self.seed, None, [], None, line)
-            new_line.correct_line = True
-            self.lines.append(new_line)
+    def GeneratedLineByCoords(self, lines_by_type):
+        for type in lines_by_type:
+            for line in lines_by_type[type]:
+                new_line = line_library.ULine(self.seed, None, [], None, line["coords_list"], line["rotation"], 0.0)
+                new_line.correct_line = True
+                self.lines[type].append(new_line)
 
         self.SetupBorderPoligonsDataFromLines(-2)
 
@@ -1059,13 +1091,13 @@ class UHeightMapGenerator:
             self.fix_line_index  = self.fix_line_index  + 1
 
         self.progress_delegate.invoke("generated_neasting_of_lines", 0)
-        for line in self.lines:
+        for line in self.lines["Contour"]:
             line.CreatePoligon()
         self.GeneratedNestingOfLines()
         self.progress_delegate.invoke("GeneratedSlopeDirectionEvent", 0)
         if (self.use_octree_to_recive_slope_line):
             self.GeneratedOctree()
-        self.GeneratedSlopeDirectionEvent(slope_lines_coords)
+        self.GeneratedSlopeDirectionEvent()
 
         self.CheckErrorLines()
 
@@ -1101,7 +1133,7 @@ class UHeightMapGenerator:
             return owner_line.GetSlopeDirectionDepthFromLineToUp()
 
     def DrawPlotHeightMap(self):
-        root_lines = line_library.GetRootLines(self.lines)
+        root_lines = line_library.GetRootLines(self.lines["Contour"])
         if(len(root_lines)<=0):
             return
         min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(root_lines)
@@ -1181,10 +1213,10 @@ class UHeightMapGenerator:
 
     def MainLaunchOperations(self):
         if(os.path.exists(self.file_path)):
-            contour_lines, slope_lines = self.ImportNewFile()
-            self.GenerateLinesByLineData(contour_lines, slope_lines)
+            lines_by_type = self.ImportNewFile()
+            self.GenerateLinesByLineData(lines_by_type)
             if (self.draw_debug_lines):
-                self.DebugDrawLines(self.lines)
+                self.DebugDrawLines(self.lines["Contour"])
                 self.end_cook_delegate.invoke()
             else:
                 self.DrawPlotHeightMap()

@@ -5,7 +5,7 @@ import random
 from typing import Optional, Sequence
 
 class ULine:
-    def __init__(self, seed, parent, childs, shapely_polygon, points):
+    def __init__(self, seed, parent, childs, shapely_polygon, points, rotation, power ):
         self.parent: Optional[ULine] = parent
         self.childs: list[ULine]  = childs
         self.shapely_polygon = shapely_polygon
@@ -14,10 +14,9 @@ class ULine:
         self.color = []
         self.correct_line = True;
         self.power = 1.0
+        self.rotation = 1.0
         self.slope_direction = "None" #None, Inside, Outside
         self.GenerateColorByLines(seed)
-
-
 
     def GenerateColorByLines(self, seed):
         s = seed
@@ -29,6 +28,21 @@ class ULine:
         b = (s * 3 + 100) % 256  # Синий компонент (с большим смещением)
 
         self.color = [int(r),int(g),int(b)]
+
+    def IsLineClose(self):
+        return self.points[0] == self.points[-1]
+
+    def GetRange(self):
+        min_point = [1000000000000.0,1000000000000.0]
+        max_point = [-1000000000000.0,-1000000000000.0]
+        for point in self.points:
+            max_point[0] = max(point[0], max_point[0])
+            max_point[1] = max(point[1], max_point[1])
+
+            min_point[0] = min(point[0], min_point[0])
+            min_point[1] = min(point[1], min_point[1])
+        return min_point, max_point
+
 
     def GetRootLine(self):
         if (self.parent):

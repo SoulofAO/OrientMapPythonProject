@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QWidget, QListWidget, QScrollArea, QFormLayout, QVBoxLayout,
     QHBoxLayout, QPushButton, QSplitter, QSizePolicy, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
 
 class UArrayWidget(QWidget):
@@ -59,10 +59,6 @@ class UArrayWidget(QWidget):
         add_btn = QPushButton("Add")
         add_btn.clicked.connect(self.add_setting)
         button_layout.addWidget(add_btn)
-
-        edit_btn = QPushButton("Edit")
-        edit_btn.clicked.connect(self.bind_edit_settings)
-        button_layout.addWidget(edit_btn)
 
         del_btn = QPushButton("Delete")
         del_btn.clicked.connect(self.delete_setting)
@@ -165,8 +161,8 @@ class UArrayWidget(QWidget):
         # Создаем кастомный виджет для отображения в ListWidget
         item_widget = QWidget()
         item_layout = QVBoxLayout()
-
-        name_label = QLabel(f"{new_setting}")  # Пример отображения одного из значений
+        index = self.list_widget.count()
+        name_label = QLabel(f"{str(index)}: {str(new_setting)}")  # Пример отображения одного из значений
 
         name_label.setWordWrap(True)
 
@@ -186,7 +182,6 @@ class UArrayWidget(QWidget):
 
         self.settings_list.append(new_setting)
         self.edit_setting(new_setting)
-        self.clear_inputs()
 
     def update_settings(self, settings=None):
         # Если settings не переданы, используем текущий выбранный элемент
@@ -210,8 +205,9 @@ class UArrayWidget(QWidget):
                     if widget_to_remove:
                         widget_to_remove.deleteLater()
 
-                # Обновляем виджет новыми значениями
-                new_name_label = QLabel(f"{settings}")  # Пример обновления строки
+                name_label_string = f"{str(index)}: {str(settings)}"  # Пример отображения одного из значений
+
+                new_name_label = QLabel(f"{name_label_string}")  # Пример обновления строки
                 new_name_label.setWordWrap(True)
                 new_name_label.setStyleSheet(f"font-size: {self.font_size}px;")
 
@@ -220,9 +216,6 @@ class UArrayWidget(QWidget):
 
                 # Обновляем размер элемента
                 list_item.setSizeHint(item_widget.sizeHint())
-
-    def bind_edit_settings(self):
-        self.edit_setting()
 
     def edit_setting(self, settings=None):
         if settings is None:
@@ -253,74 +246,68 @@ class UArrayWidget(QWidget):
 
         del self.settings_list[current_row]
         self.list_widget.takeItem(current_row)
-        self.clear_inputs()  # Очистка полей ввода после удаления
 
     def key_delete_setting(self):
         if(self.list_widget.hasFocus()):
             self.delete_setting()
-
-
-    def clear_inputs(self):
-        pass
-
-    def apply_key_event(self):
-        if(self.check_parametrs_focus()):
-            current_row = self.list_widget.currentRow()
-            if current_row >= 0:
-                self.edit_setting()
-            else:
-                self.add_setting()
-
 
     def create_spinbox(self, layout, attr_name, value):
         spin_box = QSpinBox()
         spin_box.setMinimum(-100000)
         spin_box.setMaximum(100000)
         spin_box.setValue(value)
+        spin_box.valueChanged.connect(self.on_widget_changed)
         layout.addRow(attr_name, spin_box)
         self.param_widgets.append([attr_name, spin_box])
 
     def create_double_spinbox(self, layout, attr_name, value):
         """Создание ввода числа для вещественных параметров."""
         spin_box = QDoubleSpinBox()
-        spin_box.setDecimals(2)  # Задаем точность до двух знаков после запятой
+        spin_box.setDecimals(2)
         spin_box.setMinimum(-100000.0)
-        spin_box.setMaximum(100000.0)  # Изменяй максимальное значение по необходимости
-        spin_box.setSingleStep(0.01)  # Шаг изменения значения
+        spin_box.setMaximum(100000.0)
+        spin_box.setSingleStep(0.01)
         spin_box.setValue(value)
-        self.param_widgets.append([attr_name, spin_box])
+        spin_box.valueChanged.connect(self.on_widget_changed)
         layout.addRow(attr_name, spin_box)
+        self.param_widgets.append([attr_name, spin_box])
 
     def create_checkbox(self, layout, attr_name, value):
         """Создание чекбокса для булевых параметров."""
         checkbox = QCheckBox()
         checkbox.setChecked(value)
-        self.param_widgets.append([attr_name, checkbox])
+        checkbox.stateChanged.connect(self.on_widget_changed)
         layout.addRow(attr_name, checkbox)
+        self.param_widgets.append([attr_name, checkbox])
 
     def create_lineedit(self, layout, attr_name, value):
         """Создание текстового поля для строковых параметров."""
         line_edit = QLineEdit()
-        line_edit.setText(value)  # Устанавливаем начальное значение
-        self.param_widgets.append([attr_name, line_edit])
+        line_edit.setText(value)
+        line_edit.textChanged.connect(self.on_widget_changed)
         layout.addRow(attr_name, line_edit)
+        self.param_widgets.append([attr_name, line_edit])
 
     def create_options(self, layout, attr_name, value, options):
-        """Создание ввода числа для вещественных параметров."""
+        """Создание выпадающего списка для выбора параметров."""
         combobox_directions = QComboBox()
         combobox_directions.addItems(options)
         if value in options:
             combobox_directions.setCurrentIndex(options.index(value))
-        self.param_widgets.append([attr_name, combobox_directions])
+        combobox_directions.currentIndexChanged.connect(self.on_widget_changed)
         layout.addRow(attr_name, combobox_directions)
+        self.param_widgets.append([attr_name, combobox_directions])
+
+    def on_widget_changed(self, *args):
+        self.edit_setting()
 
 
-class ImageViewer(QWidget):
+class UImageViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         # Внутренние элементы
-        self.view = _InternalGraphicsView()
+        self.view = _UInternalGraphicsView()
         layout = QVBoxLayout(self)
         layout.addWidget(self.view)
         layout.setContentsMargins(0, 0, 0, 0)  # без отступов
@@ -332,7 +319,7 @@ class ImageViewer(QWidget):
         self.view.clear()
 
 
-class _InternalGraphicsView(QGraphicsView):
+class _UInternalGraphicsView(QGraphicsView):
     def __init__(self):
         super().__init__()
 
@@ -353,15 +340,19 @@ class _InternalGraphicsView(QGraphicsView):
         self.max_scale = 5.0
 
     def setPixmap(self, pixmap: QPixmap):
-        self.scene.clear()
+        if self.pixmap_item:
+            self.scene.removeItem(self.pixmap_item)
+            self.pixmap_item = None
+
         self.pixmap_item = QGraphicsPixmapItem(pixmap)
         self.scene.addItem(self.pixmap_item)
         self.resetTransform()
         self.current_scale = 1.0
 
     def clear(self):
-        self.scene.clear()
-        self.pixmap_item = None
+        if self.pixmap_item:
+            self.scene.removeItem(self.pixmap_item)
+            self.pixmap_item = None
         self.resetTransform()
         self.current_scale = 1.0
 
@@ -386,7 +377,6 @@ class _InternalGraphicsView(QGraphicsView):
         if event.button() == Qt.LeftButton:
             self.setDragMode(QGraphicsView.NoDrag)
         super().mouseReleaseEvent(event)
-
 
 
 
