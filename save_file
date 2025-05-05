@@ -18,6 +18,7 @@
     "blend_slope_line": true,
     "seed": 1,
     "guess_slope_direction_by_rivers": true,
+    "guess_slope_direction_by_rivers_range": 50,
     "guess_slope_direction_by_contour_line_angle": true,
     "fixing_lines_settings": [
         {

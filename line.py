@@ -1,14 +1,15 @@
 import helper_functions as helper_functions
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 import numpy as np
 import random
 from typing import Optional, Sequence
 
 class ULine:
-    def __init__(self, seed, parent, childs, shapely_polygon, points, rotation, power ):
+    def __init__(self, seed, parent, childs, shapely_polygon, line_string, points, rotation, power ):
         self.parent: Optional[ULine] = parent
         self.childs: list[ULine]  = childs
-        self.shapely_polygon = shapely_polygon
+        self.shapely_polygon: Optional[Polygon] = shapely_polygon
+        self.line_string : Optional[LineString] = line_string
         self.points = points.copy()
         self.start_points = points.copy()
         self.color = []
@@ -146,6 +147,9 @@ class ULine:
             self.shapely_polygon = Polygon(self.points)
         else:
             self.correct_line = False
+
+    def CreateLine(self):
+        self.line_string = LineString(self.points)
 
     def CheckLineNumberPoint(self):
         return len(self.points)>3
