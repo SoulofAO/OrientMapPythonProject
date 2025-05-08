@@ -24,6 +24,8 @@ def clamp(value, min_value, max_value):
 
 
 type_option = ["Contour", "Slope line", "Water"]
+type_option_indexes = {"Contour":[[101, 101],[102, 103]], "Slope line":[[101.1, 101.1]],"Water" :[[300, 400]]}
+RAY_DISTANCE = 10000
 
 class UAvailibleParceLineSettings:
     def __init__(self, name = "string", type = "Contour", index = 1):
@@ -82,14 +84,56 @@ def interpolate_two_points(p0, p1, value0, value1, query_pt: Point):
     # интерполируем значение
     return value0 + t * (value1 - value0)
 
-def is_point_outside(polygon, point: Point) -> bool:
-    ray = cast_ray_from(point, Point(point.x + 1, point.y))  # Луч вправо
-    intersections = polygon.exterior.intersection(ray)
-    if intersections.is_empty:
-        return False
-    if intersections.geom_type == "MultiPoint":
-        return len(intersections.geoms) % 2 == 1
-    return 1 % 2 == 1  # Single intersection
+
+def trace(ray, polygon):
+    intersection = ray.intersection(polygon.exterior)
+    if intersection.is_empty:
+        return []
+    elif intersection.geom_type == 'Point':
+        return [intersection]
+    elif intersection.geom_type == 'MultiPoint':
+        return intersection.geoms
+    return []
+
+def trace_to_setup_slope(start_point : Optional[Point], direction : Optional[Point], line):
+    end_x = start_point.x + RAY_DISTANCE * direction.x
+    end_y = start_point.y + RAY_DISTANCE * direction.y
+    ray = LineString([(start_point.x, start_point.y), (end_x, end_y)])
+    if len(trace(ray, line.shapely_polygon)) % 2 == 1:
+        line.slope_direction = "Outside"  # Красный для Outside
+    else:
+        line.slope_direction = "Inside"  # Зеленый для Inside
+
+def multiply_point_on_float(point : Optional[Point], value:float):
+    local_point_x = point.x * value
+    local_point_y = point.y * value
+    return Point(local_point_x, local_point_y)
+
+def add_point(first_point : Optional[Point], second_point : Optional[Point]):
+    return Point(first_point.x + second_point.x, first_point.y + second_point.y)
+
+def substract_point(first_point : Optional[Point], second_point : Optional[Point]):
+    return Point(first_point.x - second_point.x, first_point.y - second_point.y)
+
+def rotation_to_vector(rotation: float) -> tuple[float, float]:
+    x = math.cos(rotation)
+    y = math.sin(rotation)
+    return Point(x, y)
+
+def remove_duplicates_from_dict(data: dict) -> dict:
+    seen_keys = set()
+    result = {}
+
+    for category, items in data.items():
+        new_items = []
+        for item in items:
+            key = next(iter(item))  # Получаем единственный ключ в словаре
+            if key not in seen_keys:
+                seen_keys.add(key)
+                new_items.append(item)
+        result[category] = new_items
+
+    return result
 
 class UFixingLinesSettings:
     counter = -1
@@ -98,7 +142,6 @@ class UFixingLinesSettings:
         UFixingLinesSettings.counter = UFixingLinesSettings.counter + 1
         self.name = f"{UFixingLinesSettings.counter}"
 
-        self.merge_point_value = 0;
         self.max_merge_line_value = 200;
         self.max_angle = 90
         self.enable_merge_with_self = True
@@ -112,10 +155,10 @@ class UFixingLinesSettings:
         self.apply_merge_line_value = True
         self.regenerate_borders = True
 
-        self.save_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+        self.save_tag = ["max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
                          "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
-        self.ui_show_tag = ["merge_point_value", "max_merge_line_value","border_distance","hight_find_direction",
+        self.ui_show_tag = ["max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
                             "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
 
@@ -199,6 +242,7 @@ class UHeightMapGenerator:
         self.guess_slope_direction_by_rivers = True
         self.guess_slope_direction_by_rivers_range = 50
         self.guess_slope_direction_by_contour_line_angle = True
+        self.guess_object_type_by_direct_indexes = True
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines: Dict[str, List[line.ULine]] = {}  # Линии, которые будут обрабатываться
@@ -221,14 +265,14 @@ class UHeightMapGenerator:
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                          'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
                          'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',
-                         'guess_slope_direction_by_contour_line_angle']
+                         'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                             'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
                             'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',
-                            'guess_slope_direction_by_contour_line_angle']
+                            'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes']
 
 
 
@@ -329,8 +373,21 @@ class UHeightMapGenerator:
 
         for available_parce_line in self.availible_parce_contour_line_settings:
             ID = helper_functions.extract_symbols(root, available_parce_line.name, namespace)
-            symbols_by_type[available_parce_line.type].append(ID)
+            if(ID =={}):
+                continue
+            else:
+                for local_id in ID:
+                    symbols_by_type[available_parce_line.type].append({local_id : ID[local_id]})
 
+        if(self.guess_object_type_by_direct_indexes):
+            for type_option_index_type in type_option_indexes:
+                for type_option_index in type_option_indexes[type_option_index_type]:
+                    ID = helper_functions.extract_symbols_by_code(root, type_option_index, namespace)
+                    for local_id in ID:
+                        if(not ({local_id : ID[local_id]} in symbols_by_type[type_option_index_type])):
+                            symbols_by_type[type_option_index_type].append({local_id : ID[local_id]})
+
+        symbols_by_type = remove_duplicates_from_dict(symbols_by_type)
         objects = root.findall(f'.//{namespace}objects')
         for object in objects:
             for obj in object.findall(f'.//{namespace}object'):
@@ -942,7 +999,7 @@ class UHeightMapGenerator:
         if polygon.contains(test_point):
             normal_vector = (-normal_vector[0], -normal_vector[1])
 
-        return normal_vector
+        return Point(normal_vector[0], normal_vector[1])
 
 
     def GeneratedSlopeDirectionEvent(self):
@@ -957,20 +1014,9 @@ class UHeightMapGenerator:
                 if(closed_line):
                     projection_point, closest_segment = self.direction_from_point_to_polygon(
                         closed_line.shapely_polygon, coord)
-                    normal = self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon)
-                    normal = (
-                    normal[0] * 100 * self.global_scale_multiplier, normal[1] * 100 * self.global_scale_multiplier)
-                    project_point = [projection_point.x + normal[0], projection_point.y + normal[1]]
-                    ray_distance = 10000
-                    end_x = project_point[0] + ray_distance * math.cos(rotation + math.pi / 2)
-                    end_y = project_point[1] + ray_distance * math.sin(rotation + math.pi / 2)
-
-                    ray = LineString([(project_point[0], project_point[1]), (end_x, end_y)])
-
-                    if ray.intersects(closed_line.shapely_polygon.exterior):
-                        closed_line.slope_direction = "Outside"
-                    else:
-                        closed_line.slope_direction = "Inside"
+                    normal =  multiply_point_on_float(self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon),self.global_scale_multiplier )
+                    project_point = add_point(projection_point, normal)
+                    trace_to_setup_slope(project_point, rotation_to_vector(rotation), closed_line)
         else:
             k = 0
             for slope_line_coord in self.lines["Slope line"]:
@@ -989,19 +1035,9 @@ class UHeightMapGenerator:
 
                 if(closed_line):
                     projection_point, closest_segment = self.direction_from_point_to_polygon(closed_line.shapely_polygon, coord)
-                    normal = self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon)
-                    normal = (normal[0]*100*self.global_scale_multiplier, normal[1]*100*self.global_scale_multiplier )
-                    project_point = [projection_point.x +  normal[0], projection_point.y +  normal[1]]
-                    ray_distance = 10000
-                    end_x = project_point[0] + ray_distance * math.cos(rotation + math.pi/2)
-                    end_y = project_point[1] + ray_distance * math.sin(rotation + math.pi/2)
-
-                    ray = LineString([(project_point[0], project_point[1]), (end_x, end_y)])
-
-                    if len(ray.intersects(closed_line.shapely_polygon.exterior)%2 == 1):
-                        closed_line.slope_direction = "Outside"# Красный для Outside
-                    else:
-                        closed_line.slope_direction = "Inside" # Зеленый для Inside
+                    normal =  multiply_point_on_float(self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon),self.global_scale_multiplier )
+                    project_point = add_point(projection_point, normal)
+                    trace_to_setup_slope(project_point, rotation_to_vector(rotation), closed_line)
 
         if self.guess_slope_direction_by_rivers:
             for water_line in self.lines["Water"]:
@@ -1014,7 +1050,9 @@ class UHeightMapGenerator:
                 near_counter_lines : List[line_library.ULine] = self.octree_for_lines.query([min_range[0],min_range[1], max_range[0],max_range[1]])
                 error_lines = [line for line in near_counter_lines if line.slope_direction == "None"]
                 if(len(error_lines)==0):
-                    continue;
+                    error_lines = [line for line in self.lines["Contour"] if line.slope_direction == "None"]
+                if(len(error_lines)==0):
+                    continue
                 for error_line in error_lines:
                     water_line.CreateLine()
                     error_line.CreateLine()
@@ -1025,51 +1063,23 @@ class UHeightMapGenerator:
                         intersection_circle_point = water_line.line_string.intersection(circle)
 
                         if (intersection_circle_point.geom_type == 'Point'):
-                            ray_distance = 10000
-                            end_x = intersection_circle_point.coords[0].x + ray_distance * (
-                                        intersection.coords[0].x - intersection_circle_point.coords[0].x)
-                            end_y = intersection_circle_point.coords[1].y + ray_distance * (
-                                        intersection.coords[0].y - intersection_circle_point.coords[0].y)
-                            ray = LineString(
-                                [(intersection_circle_point.coords[0].x, intersection_circle_point.coords[1].y), (end_x, end_y)])
-                            if len(ray.intersects(error_line.shapely_polygon.exterior) % 2 == 1):
-                                error_line.slope_direction = "Outside"  # Красный для Outside
-                            else:
-                                error_line.slope_direction = "Inside"  # Зеленый для Inside
+                            trace_to_setup_slope(intersection_circle_point.coords[0], intersection_circle_point.coords[0] - intersection.coords[0], error_line)
 
-                            pass
-
-                        elif intersection_circle_point.geom_type == "Multipoint":
+                        elif intersection_circle_point.geom_type == "Multipoint" or intersection_circle_point.geom_type == "LineString":
                             checked_coords: List[Point] = []
                             for coord in water_line.line_string.coords:
-                                if (intersection.distance(coord) < radius):
-                                    checked_coords.append(coord)
+                                if (intersection.distance(Point(coord)) < radius):
+                                    checked_coords.append(Point(coord))
                             in_sum = 0.0
                             out_sum = 0.0
                             for check_coord in checked_coords:
-                                in_sum += intersection_circle_point.coords[0].distance(check_coord)
-                                out_sum += intersection_circle_point.coords[1].distance(check_coord)
-                            if(in_sum!=0.0 and out_sum!=0.0):
+                                in_sum += Point(intersection_circle_point.coords[0]).distance(check_coord)
+                                out_sum += Point(intersection_circle_point.coords[1]).distance(check_coord)
+                            if(in_sum!=0.0 or out_sum!=0.0):
                                 if(in_sum>out_sum):
-                                    ray_distance = 10000
-                                    end_x = intersection_circle_point.coords[0].x + ray_distance * (intersection.coords[0].x - intersection_circle_point.coords[0].x)
-                                    end_y = intersection_circle_point.coords[0].y + ray_distance * (intersection.coords[0].y - intersection_circle_point.coords[0].y)
-                                    ray = LineString([(intersection_circle_point.coords[0].x, intersection_circle_point.coords[1].y), (end_x, end_y)])
-                                    if len(ray.intersects(error_line.shapely_polygon.exterior) % 2 == 1):
-                                        error_line.slope_direction = "Outside"  # Красный для Outside
-                                    else:
-                                        error_line.slope_direction = "Inside"  # Зеленый для Inside
+                                    trace_to_setup_slope(Point(intersection_circle_point.coords[0]), substract_point(Point(intersection_circle_point.coords[0]), Point(intersection.coords[0])), error_line)
                                 else:
-                                    ray_distance = 10000
-                                    end_x = intersection_circle_point.coords[1].x + ray_distance * (intersection.coords[1].x - intersection_circle_point.coords[1].x)
-                                    end_y = intersection_circle_point.coords[1].y + ray_distance * (intersection.coords[1].y - intersection_circle_point.coords[1].y)
-                                    ray = LineString(
-                                        [(intersection_circle_point.coords[0].x, intersection_circle_point.coords[1].y), (end_x, end_y)])
-                                    if len(ray.intersects(error_line.shapely_polygon.exterior) % 2 == 1):
-                                        error_line.slope_direction = "Outside"  # Красный для Outside
-                                    else:
-                                        error_line.slope_direction = "Inside"  # Зеленый для Inside
-
+                                    trace_to_setup_slope(Point(intersection_circle_point.coords[1]), substract_point(Point(intersection_circle_point.coords[1]), Point(intersection.coords[0])), error_line)
                     else:
                         if (error_line.shapely_polygon):
                             if (error_line.shapely_polygon.contains(water_line.line_string)):
@@ -1164,6 +1174,8 @@ class UHeightMapGenerator:
 
 
     def GeneratedLineByCoords(self, lines_by_type):
+        for type in type_option:
+            self.lines[type] = []
         for type in lines_by_type:
             for line in lines_by_type[type]:
                 new_line = line_library.ULine(self.seed, None, [], None, None, line["coords_list"], line["rotation"], 0.0)

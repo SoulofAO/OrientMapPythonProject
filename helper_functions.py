@@ -61,9 +61,34 @@ def extract_symbols(root, name, namespace):
 
     for symbol in root.findall(f'.//{namespace}symbol'):
         symbol_id = symbol.get('id')
+        code = symbol.get('code')
         symbol_name = symbol.get('name')
         if symbol_name and (name in symbol_name):
             symbols[symbol_id] = symbol_name
+
+    return symbols
+
+def extract_symbols_by_code(root, code_range, namespace):
+    symbols = {}
+    min_code, max_code = code_range
+
+    for symbol in root.findall(f'.//{namespace}symbol'):
+        symbol_id = symbol.get('id')
+        try:
+            symbol_code = symbol.get('code')
+            symbol_name = symbol.get('name')
+
+            if symbol_code is not None:
+                code = float(symbol_code)
+                if(min_code == max_code):
+                    if min_code <= code <= max_code:
+                        symbols[symbol_id] = symbol_name
+                else:
+                    if min_code <= code < max_code:
+                        symbols[symbol_id] = symbol_name
+        except:
+            continue
+
     return symbols
 
     # Функция для поиска объектов по идентификатору символа и извлечения координат

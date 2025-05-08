@@ -82,6 +82,14 @@ class UHeightmapGeneratorUI(QMainWindow):
         self.error_lines_counter.setText("Error Lines Counter: 0")
         high_layout.addWidget(self.error_lines_counter)
 
+        self.line_color_transcription_label = QLabel("")
+        self.line_color_transcription_label.setText(
+            '<span style="color:red;">Red</span> for Outside; '
+            '<span style="color:green;">Green</span> for Inside;'
+        )
+        high_layout.addWidget(self.line_color_transcription_label)
+        self.line_color_transcription_label.setVisible(False)
+
         high_widget.setLayout(high_layout)
 
         left_splitter.addWidget(high_widget)
@@ -324,6 +332,10 @@ class UHeightmapGeneratorUI(QMainWindow):
     @pyqtSlot()
     def on_image_cooked(self):
         if (self.settings.cook_image):
+            if(self.settings.draw_debug_lines):
+                self.line_color_transcription_label.setVisible(True)
+            else:
+                self.line_color_transcription_label.setVisible(False)
             save_path = "output_image.png"  # или другой путь и имя файла
             self.settings.cook_image.save(save_path)
             loaded_pixmap = QPixmap(save_path)
