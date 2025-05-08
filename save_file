@@ -15,12 +15,16 @@
     "max_distance_to_slope_line": 20,
     "use_octree_to_fix_line": false,
     "use_octree_to_recive_slope_line": true,
-    "blend_slope_line": true,
+    "blend_slope_line": false,
     "seed": 1,
-    "guess_slope_direction_by_rivers": false,
+    "guess_slope_direction_by_rivers": true,
     "guess_slope_direction_by_rivers_range": 50,
+    "guess_slope_direction_by_intersect_rivers_trace_range": 25,
+    "guess_slope_direction_by_rivers_debug_draw": true,
     "guess_slope_direction_by_contour_line_angle": true,
     "guess_object_type_by_direct_indexes": true,
+    "optimize_line_point_count": true,
+    "optimize_line_point_percent": 20,
     "fixing_lines_settings": [
         {
             "max_merge_line_value": 20,

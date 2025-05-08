@@ -2,7 +2,7 @@ import helper_functions as helper_functions
 from shapely.geometry import Polygon, LineString
 import numpy as np
 import random
-from typing import Optional, Sequence
+from typing import Optional, Sequence, List, Tuple
 
 class ULine:
     def __init__(self, seed, parent, childs, shapely_polygon, line_string, points, rotation, power ):
@@ -227,6 +227,80 @@ def GetRootLines(lines):
         print(e)
     return answer
 
+
+
+def rdp(points: List[Tuple[float, float]], epsilon: float) -> List[Tuple[float, float]]:
+    """Ramer-Douglas-Peucker simplification algorithm"""
+    if len(points) < 3:
+        return points
+
+    start, end = points[0], points[-1]
+    max_dist = 0
+    index = 0
+    for i in range(1, len(points) - 1):
+        dist = perpendicular_distance(points[i], start, end)
+        if dist > max_dist:
+            index = i
+            max_dist = dist
+
+    if max_dist > epsilon:
+        left = rdp(points[:index + 1], epsilon)
+        right = rdp(points[index:], epsilon)
+        return left[:-1] + right
+    else:
+        return [start, end]
+
+def perpendicular_distance(point, line_start, line_end):
+    if line_start == line_end:
+        return np.linalg.norm(np.array(point) - np.array(line_start))
+    else:
+        line = np.array(line_end) - np.array(line_start)
+        t = np.dot(np.array(point) - np.array(line_start), line) / np.dot(line, line)
+        t = max(0, min(1, t))
+        proj = np.array(line_start) + t * line
+        return np.linalg.norm(np.array(point) - proj)
+
+def simplify_line_by_percent(line: Optional[ULine], percent: float):
+    if(percent < 0):
+        percent = 5.0
+    if(percent>100):
+        percent = 100
+    best_result = simplify_line_by_percent_points(line.points, percent)
+    line.points = best_result
+    line.CreatePoligon()
+
+def simplify_line_by_percent_points(points: List[Tuple[float, float]], percent: float) -> List[Tuple[float, float]]:
+    """
+    Упрощает линию, оставляя ~percent% точек (0–100).
+    """
+    if not (0 < percent <= 100):
+        raise ValueError("Процент должен быть в диапазоне (0, 100].")
+
+    target_count = max(2, int(len(points) * percent / 100))
+
+    # Бинарный поиск подходящего epsilon
+    low, high = 0.0, max_line_extent(points)
+    best_result = points
+
+    for _ in range(20):
+        mid = (low + high) / 2
+        simplified = rdp(points, mid)
+        if len(simplified) > target_count:
+            low = mid
+        else:
+            high = mid
+            best_result = simplified
+        if len(simplified) == target_count:
+            break
+
+    return best_result
+
+def max_line_extent(points: List[Tuple[float, float]]) -> float:
+    """Максимальная длина линии, используемая для грубой оценки максимального epsilon"""
+    extent = 0.0
+    for i in range(1, len(points)):
+        extent = max(extent, np.linalg.norm(np.array(points[i]) - np.array(points[i - 1])))
+    return extent
 
 
 

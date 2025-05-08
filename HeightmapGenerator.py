@@ -91,14 +91,22 @@ def trace(ray, polygon):
         return []
     elif intersection.geom_type == 'Point':
         return [intersection]
-    elif intersection.geom_type == 'MultiPoint':
-        return intersection.geoms
-    return []
+    elif intersection.geom_type in ['MultiPoint', 'GeometryCollection']:
+       return [geom for geom in intersection.geoms if geom.geom_type == 'Point']
+    elif intersection.geom_type == 'LineString':
+        return [Point(intersection.coords[0]), Point(intersection.coords[-1])]
+    elif intersection.geom_type == 'MultiLineString':
+        geoms = []
+        geoms.append(Point(intersection.geoms[0].coords[0]))
+        geoms.append(intersection.geoms[0].coords[-1])
+        return geoms
 
 def trace_to_setup_slope(start_point : Optional[Point], direction : Optional[Point], line):
     end_x = start_point.x + RAY_DISTANCE * direction.x
     end_y = start_point.y + RAY_DISTANCE * direction.y
     ray = LineString([(start_point.x, start_point.y), (end_x, end_y)])
+    if(not line.shapely_polygon):
+        return
     if len(trace(ray, line.shapely_polygon)) % 2 == 1:
         line.slope_direction = "Outside"  # Красный для Outside
     else:
@@ -134,6 +142,21 @@ def remove_duplicates_from_dict(data: dict) -> dict:
         result[category] = new_items
 
     return result
+
+def GetOnlyIntersectionRadiusPoint(intersection):
+    if intersection.is_empty:
+        return []
+    elif intersection.geom_type == 'Point':
+        geoms = [intersection]
+    elif intersection.geom_type in ['MultiPoint', 'GeometryCollection']:
+       return [geom for geom in intersection.geoms if geom.geom_type == 'Point']
+    elif intersection.geom_type == 'LineString':
+        return [Point(intersection.coords[0]), Point(intersection.coords[-1])]
+    elif intersection.geom_type == 'MultiLineString':
+        geoms = []
+        geoms.append(Point(intersection.geoms[0].coords[0]))
+        geoms.append(Point(intersection.geoms[0].coords[-1]))
+        return geoms
 
 class UFixingLinesSettings:
     counter = -1
@@ -241,8 +264,14 @@ class UHeightMapGenerator:
         self.blend_slope_line = True
         self.guess_slope_direction_by_rivers = True
         self.guess_slope_direction_by_rivers_range = 50
+        self.guess_slope_direction_by_intersect_rivers_trace_range = 25
+        self.guess_slope_direction_by_rivers_debug_draw = True
+        self.guess_slope_direction_by_rivers_debug_draw_circle = []
+
         self.guess_slope_direction_by_contour_line_angle = True
         self.guess_object_type_by_direct_indexes = True
+        self.optimize_line_point_count = True
+        self.optimize_line_point_percent = 80
 
         self.fixing_lines_settings = [UFixingLinesSettings()]  # Настройки для исправления линий
         self.lines: Dict[str, List[line.ULine]] = {}  # Линии, которые будут обрабатываться
@@ -264,15 +293,18 @@ class UHeightMapGenerator:
                          'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                          'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
-                         'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',
-                         'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes']
+                         'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range', 'guess_slope_direction_by_intersect_rivers_trace_range',
+                         'guess_slope_direction_by_rivers_debug_draw', 'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
+                         'optimize_line_point_count','optimize_line_point_percent']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                             'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
-                            'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',
-                            'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes']
+                            'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',  'guess_slope_direction_by_intersect_rivers_trace_range',
+                            'guess_slope_direction_by_rivers_debug_draw',
+                            'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
+                            'optimize_line_point_count','optimize_line_point_percent']
 
 
 
@@ -548,6 +580,11 @@ class UHeightMapGenerator:
         coords = [(int(x[i] + offset_x), int(y[i] + offset_y)) for i in range(len(x))]
         draw.line(coords, fill=color, width=width)
 
+    def draw_circle(self, draw, center, radius, offset_x, offset_y, color):
+        x, y = center
+        bbox = [x - radius +offset_x, y - radius + offset_y, x + radius +offset_x, y + radius + offset_y]
+        draw.ellipse(bbox,outline=color, width=1)
+
     def draw_lines(self, draw, lines, offset_x, offset_y):
         for line in lines["Contour"]:
             if len(line.points) >= 2:
@@ -591,6 +628,9 @@ class UHeightMapGenerator:
         offset_y = -min_y
 
         self.draw_lines(draw, self.lines , offset_x, offset_y)
+        if(self.guess_slope_direction_by_rivers_debug_draw):
+            for circle in self.guess_slope_direction_by_rivers_debug_draw_circle:
+                self.draw_circle(draw, circle["center"], circle["radius"], offset_x, offset_y, (255, 255, 255))
 
         if self.draw_with_max_border_polygon:
             self.draw_polygon(draw, self.border_polygon, offset_x, offset_y, "red")
@@ -743,7 +783,6 @@ class UHeightMapGenerator:
         return self.GeneratedLineByCoords(lines_by_type)
 
     def FixMergeNearLines(self, setting:UFixingLinesSettings):
-
         if(setting.apply_merge_line_value):
             answer_lines = []
             availible_lines = self.lines["Contour"].copy()
@@ -996,13 +1035,14 @@ class UHeightMapGenerator:
 
         test_point = Point(mid_point.x + normal_vector[0] * 0.01, mid_point.y + normal_vector[1] * 0.01)
 
-        if polygon.contains(test_point):
+        if not polygon.contains(test_point):
             normal_vector = (-normal_vector[0], -normal_vector[1])
 
         return Point(normal_vector[0], normal_vector[1])
 
 
     def GeneratedSlopeDirectionEvent(self):
+        self.guess_slope_direction_by_rivers_debug_draw_circle = []
         if(self.use_octree_to_recive_slope_line):
             k = 0
             for slope_line_coord in self.lines["Slope line"]:
@@ -1057,29 +1097,42 @@ class UHeightMapGenerator:
                     water_line.CreateLine()
                     error_line.CreateLine()
                     if (water_line.line_string.intersects(error_line.line_string)):
-                        intersection: Optional[Point] = water_line.line_string.intersection(error_line.line_string)
-                        radius = 25;
-                        circle = intersection.buffer(radius, resolution=64)
+                        intersection= water_line.line_string.intersection(error_line.line_string)
+                        radius = self.guess_slope_direction_by_intersect_rivers_trace_range
+
+                        if(self.guess_slope_direction_by_rivers_debug_draw):
+                            self.guess_slope_direction_by_rivers_debug_draw_circle.append({"radius" : radius, "center" :  intersection.coords[0]})
+
+                        circle = intersection.buffer(radius, resolution=64).boundary
                         intersection_circle_point = water_line.line_string.intersection(circle)
 
                         if (intersection_circle_point.geom_type == 'Point'):
-                            trace_to_setup_slope(intersection_circle_point.coords[0], intersection_circle_point.coords[0] - intersection.coords[0], error_line)
+                            projection_point, closest_segment = self.direction_from_point_to_polygon(error_line.shapely_polygon, intersection_circle_point)
+                            normal = multiply_point_on_float(self.get_normal_from_segment(closest_segment, error_line.shapely_polygon), self.global_scale_multiplier)
+                            project_point = add_point(projection_point, normal)
+                            trace_to_setup_slope(project_point, substract_point(intersection, intersection_circle_point), error_line)
 
-                        elif intersection_circle_point.geom_type == "Multipoint" or intersection_circle_point.geom_type == "LineString":
+                        elif intersection_circle_point.geom_type == "MultiPoint" or intersection_circle_point.geom_type == "LineString":
+                            if(len(GetOnlyIntersectionRadiusPoint(intersection_circle_point)) == 0):
+                                continue
+                            point1 = GetOnlyIntersectionRadiusPoint(intersection_circle_point)[0]
+                            point2 = GetOnlyIntersectionRadiusPoint(intersection_circle_point)[1]
                             checked_coords: List[Point] = []
-                            for coord in water_line.line_string.coords:
+                            for coord in error_line.line_string.coords:
                                 if (intersection.distance(Point(coord)) < radius):
                                     checked_coords.append(Point(coord))
-                            in_sum = 0.0
-                            out_sum = 0.0
+                            first_sum = 0.0
+                            second_sum = 0.0
                             for check_coord in checked_coords:
-                                in_sum += Point(intersection_circle_point.coords[0]).distance(check_coord)
-                                out_sum += Point(intersection_circle_point.coords[1]).distance(check_coord)
-                            if(in_sum!=0.0 or out_sum!=0.0):
-                                if(in_sum>out_sum):
-                                    trace_to_setup_slope(Point(intersection_circle_point.coords[0]), substract_point(Point(intersection_circle_point.coords[0]), Point(intersection.coords[0])), error_line)
+                                first_sum += point1.distance(check_coord)
+                                second_sum += point2.distance(check_coord)
+                            if(first_sum !=0.0 or second_sum!=0.0):
+                                if (first_sum > second_sum):
+                                    trace_to_setup_slope(point1, substract_point(point1, Point(intersection.coords[0])),
+                                                         error_line)
                                 else:
-                                    trace_to_setup_slope(Point(intersection_circle_point.coords[1]), substract_point(Point(intersection_circle_point.coords[1]), Point(intersection.coords[0])), error_line)
+                                    trace_to_setup_slope(point2, substract_point(point2, Point(intersection.coords[0])),
+                                                         error_line)
                     else:
                         if (error_line.shapely_polygon):
                             if (error_line.shapely_polygon.contains(water_line.line_string)):
@@ -1183,7 +1236,9 @@ class UHeightMapGenerator:
                 self.lines[type].append(new_line)
 
         self.SetupBorderPoligonsDataFromLines(-2)
-
+        if (self.optimize_line_point_count):
+            for line in self.lines["Contour"]:
+                line_library.simplify_line_by_percent(line, self.optimize_line_point_percent)
         if(self.use_octree_to_fix_line):
             self.GeneratedOctree()
         self.fix_line_index = 0
