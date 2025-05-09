@@ -158,7 +158,7 @@ class UHeightmapGeneratorUI(QMainWindow):
         right_splitter.addWidget(availible_parce_lines_text_label)
         availible_parce_lines_text_label.setAlignment(Qt.AlignCenter)
 
-        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_contour_line_settings)
+        self.availible_parce_lines_array = UIModulate.UArrayWidget(UAvailibleParceLineSettings, self.settings.availible_parce_line_settings)
         right_splitter.addWidget(self.availible_parce_lines_array)
 
         right_splitter.addWidget(scroll_area)
@@ -199,7 +199,7 @@ class UHeightmapGeneratorUI(QMainWindow):
     def UpdateLoadedStatusText(self):
         if(self.settings.file_path):
             if(os.path.exists(self.settings.file_path)):
-                self.loaded_status_text.setText("Loaded")
+                self.loaded_status_text.setText("Loaded " + str(self.settings.file_path))
                 return
         self.loaded_status_text.setText("Not Loaded")
 

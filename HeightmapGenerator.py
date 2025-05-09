@@ -85,32 +85,15 @@ def interpolate_two_points(p0, p1, value0, value1, query_pt: Point):
     return value0 + t * (value1 - value0)
 
 
-def trace(ray, polygon):
-    intersection = ray.intersection(polygon.exterior)
-    if intersection.is_empty:
-        return []
-    elif intersection.geom_type == 'Point':
-        return [intersection]
-    elif intersection.geom_type in ['MultiPoint', 'GeometryCollection']:
-       return [geom for geom in intersection.geoms if geom.geom_type == 'Point']
-    elif intersection.geom_type == 'LineString':
-        return [Point(intersection.coords[0]), Point(intersection.coords[-1])]
-    elif intersection.geom_type == 'MultiLineString':
-        geoms = []
-        geoms.append(Point(intersection.geoms[0].coords[0]))
-        geoms.append(intersection.geoms[0].coords[-1])
-        return geoms
-
 def trace_to_setup_slope(start_point : Optional[Point], direction : Optional[Point], line):
-    end_x = start_point.x + RAY_DISTANCE * direction.x
-    end_y = start_point.y + RAY_DISTANCE * direction.y
-    ray = LineString([(start_point.x, start_point.y), (end_x, end_y)])
-    if(not line.shapely_polygon):
-        return
-    if len(trace(ray, line.shapely_polygon)) % 2 == 1:
-        line.slope_direction = "Outside"  # Красный для Outside
+    projection_point, closest_segment = direction_from_point_to_polygon(line.shapely_polygon,start_point)
+    print(projection_point)
+    projection_point = add_point(projection_point, multiply_point_on_float(normalize(direction), 0.2))
+    print(projection_point)
+    if (not line.shapely_polygon.contains(projection_point)):
+        line.slope_direction = "Outside"
     else:
-        line.slope_direction = "Inside"  # Зеленый для Inside
+        line.slope_direction = "Inside"
 
 def multiply_point_on_float(point : Optional[Point], value:float):
     local_point_x = point.x * value
@@ -123,10 +106,14 @@ def add_point(first_point : Optional[Point], second_point : Optional[Point]):
 def substract_point(first_point : Optional[Point], second_point : Optional[Point]):
     return Point(first_point.x - second_point.x, first_point.y - second_point.y)
 
+def normalize(point : Optional[Point]):
+    vectors = helper_functions.normalize([point.x, point.y])
+    return Point(vectors)
+
 def rotation_to_vector(rotation: float) -> tuple[float, float]:
-    x = math.cos(rotation)
-    y = math.sin(rotation)
-    return Point(x, y)
+    x = math.cos(rotation + 3.14)
+    y = math.sin(rotation + 3.14)
+    return Point(y, x)
 
 def remove_duplicates_from_dict(data: dict) -> dict:
     seen_keys = set()
@@ -158,6 +145,52 @@ def GetOnlyIntersectionRadiusPoint(intersection):
         geoms.append(Point(intersection.geoms[0].coords[-1]))
         return geoms
 
+
+def direction_from_point_to_polygon(polygon, point):
+    coords = list(polygon.exterior.coords)
+    point = Point(point)
+    min_distance = float('inf')
+    projection_point = None
+    closest_segment = None
+
+    for i in range(len(coords) - 1):
+        line_segment = [Point(coords[i]), Point(coords[i + 1])]
+        projection = project_point_onto_line_segment(point, line_segment)
+        distance = point.distance(projection)
+
+        if distance < min_distance:
+            min_distance = distance
+            projection_point = projection
+            closest_segment = LineString(line_segment)
+
+    return projection_point, closest_segment
+
+def project_point_onto_line_segment(point, line_segment):
+    p1, p2 = line_segment
+    line_vec = np.array([p2.x - p1.x, p2.y - p1.y])
+    point_vec = np.array([point.x - p1.x, point.y - p1.y])
+
+    line_len_squared = np.dot(line_vec, line_vec)
+    if line_len_squared == 0:
+        return p1
+
+    t = np.dot(point_vec, line_vec) / line_len_squared
+    t = max(0, min(1, t))
+
+    projection_x = p1.x + t * line_vec[0]
+    projection_y = p1.y + t * line_vec[1]
+
+    return Point(projection_x, projection_y)
+
+def rotate_vector(vec, angle_degrees):
+    angle = math.radians(angle_degrees)
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return (
+        vec[0] * cos_a - vec[1] * sin_a,
+        vec[0] * sin_a + vec[1] * cos_a
+    )
+
 class UFixingLinesSettings:
     counter = -1
 
@@ -177,13 +210,14 @@ class UFixingLinesSettings:
         self.apply_fix_unborder_lines = True
         self.apply_merge_line_value = True
         self.regenerate_borders = True
+        self.use_normalize_blend_if_possible = True
 
         self.save_tag = ["max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
-                         "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
+                         "fix_unborder_if_both_point_unborder", "use_normalize_blend_if_possible", "enable_merge_with_self"]
         self.ui_show_tag = ["max_merge_line_value","border_distance","hight_find_direction",
                             "apply_fix_unborder_lines", "apply_merge_line_value", "regenerate_borders", "max_angle",
-                            "fix_unborder_if_both_point_unborder", "enable_merge_with_self"]
+                            "fix_unborder_if_both_point_unborder", "use_normalize_blend_if_possible", "enable_merge_with_self"]
 
 
     def __str__(self):
@@ -227,11 +261,12 @@ class UHeightMapGenerator:
         self.cook_image = None  # Изображение для отладки или вывода
 
         # 4. Параметры обработки линий
-        self.availible_parce_contour_line_settings = [UAvailibleParceLineSettings("Contour","Contour", 1),
+        self.availible_parce_line_settings = [UAvailibleParceLineSettings("Contour","Contour", 1),
                                                       UAvailibleParceLineSettings("Index contour","Contour", 1),
                                                       UAvailibleParceLineSettings("Slope line, contour",  "Slope line", 1),
                                                       UAvailibleParceLineSettings("Index contour", "Slope line", 1),
                                                       UAvailibleParceLineSettings("Slope line, index contour", "Slope line", 1),
+                                                      UAvailibleParceLineSettings("Slope line", "Slope line", 1),
                                                       UAvailibleParceLineSettings("Uncrossable body of water (full colour), with bank line", "Water", 1),
                                                       UAvailibleParceLineSettings("Uncrossable body of water (dominant), with bank line", "Water", 1),
                                                       UAvailibleParceLineSettings("Uncrossable body of water (dominant)", "Water", 1),
@@ -262,6 +297,7 @@ class UHeightMapGenerator:
         self.use_octree_to_fix_line = False
         self.use_octree_to_recive_slope_line = True
         self.blend_slope_line = True
+        self.slope_line_debug_draw = True
         self.guess_slope_direction_by_rivers = True
         self.guess_slope_direction_by_rivers_range = 50
         self.guess_slope_direction_by_intersect_rivers_trace_range = 25
@@ -290,21 +326,21 @@ class UHeightMapGenerator:
 
         self.save_tag = ['file_path', 'global_scale_multiplier', 'first_level_distance',
                          'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                         'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
+                         'remove_all_error_lines','min_owner_overlap',
                          'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                          'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
                          'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range', 'guess_slope_direction_by_intersect_rivers_trace_range',
                          'guess_slope_direction_by_rivers_debug_draw', 'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
-                         'optimize_line_point_count','optimize_line_point_percent']
+                         'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
-                            'remove_all_error_lines','min_owner_overlap', 'availible_parce_slope_line_setting',
+                            'remove_all_error_lines','min_owner_overlap',
                             'draw_with_slope_line_color', 'max_distance_to_slope_line', 'use_octree_to_fix_line',
                             'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
                             'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',  'guess_slope_direction_by_intersect_rivers_trace_range',
                             'guess_slope_direction_by_rivers_debug_draw',
                             'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
-                            'optimize_line_point_count','optimize_line_point_percent']
+                            'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw']
 
 
 
@@ -313,7 +349,7 @@ class UHeightMapGenerator:
         data = {k: getattr(self, k) for k in self.save_tag}
         # Сериализация списка fixing_lines_settings
         data['fixing_lines_settings'] = [settings.to_dict() for settings in self.fixing_lines_settings]
-        data['availible_parce_contour_line_settings'] = [settings.to_dict() for settings in self.availible_parce_contour_line_settings]
+        data['availible_parce_line_settings'] = [settings.to_dict() for settings in self.availible_parce_line_settings]
         return data
 
     def from_dict(self, data):
@@ -330,11 +366,11 @@ class UHeightMapGenerator:
                     self.fixing_lines_settings.append(new_fixing_lines_setting)
             elif k == 'availible_parce_settings':
                 # Десериализация списка availible_parce_settings
-                self.availible_parce_contour_line_settings.clear()
+                self.availible_parce_line_settings.clear()
                 for item in v:
                     new_availible_parce_line_setting = UAvailibleParceLineSettings()
                     new_availible_parce_line_setting.from_dict(item)
-                    self.availible_parce_contour_line_settings.append(new_availible_parce_line_setting)
+                    self.availible_parce_line_settings.append(new_availible_parce_line_setting)
                     print(new_availible_parce_line_setting)
 
     @property
@@ -366,7 +402,7 @@ class UHeightMapGenerator:
 
             symbols_lines = {}
 
-            for available_parce_contour_line in self.availible_parce_contour_line_settings:
+            for available_parce_contour_line in self.availible_parce_line_settings:
                 symbols_lines.update(
                     helper_functions.extract_symbols(root, available_parce_contour_line.name, namespace))
 
@@ -380,7 +416,7 @@ class UHeightMapGenerator:
                     if (not points[0] in options):
                         options.append(points[0])
             set_options_to_availible_parce_line_settings(options)
-            for option in self.availible_parce_contour_line_settings:
+            for option in self.availible_parce_line_settings:
                 if (option):
                     option.update_options_by_global_options()
         elif file_extension == "ocd":
@@ -403,7 +439,7 @@ class UHeightMapGenerator:
             lines_by_type[type] = []
             symbols_by_type[type] = []
 
-        for available_parce_line in self.availible_parce_contour_line_settings:
+        for available_parce_line in self.availible_parce_line_settings:
             ID = helper_functions.extract_symbols(root, available_parce_line.name, namespace)
             if(ID =={}):
                 continue
@@ -607,8 +643,36 @@ class UHeightMapGenerator:
                 flat_coords = [(int(point[0] + offset_x), int(point[1] + offset_y)) for point in line.points]
                 draw.line(flat_coords, fill=(0, 46, 255), width=2)
 
+        if self.slope_line_debug_draw:
+            for line in self.lines["Slope line"]:
+                start = (line.points[0][0] + offset_x, line.points[0][1] + offset_y)
+                direction = normalize(rotation_to_vector(line.rotation))
+                end = (
+                    start[0] + direction.x * 10,
+                    start[1] + direction.y * 10
+                )
+                draw.line([start, end], fill=(235,82,132), width=2)
+
+                left_dir = rotate_vector((direction.x, direction.y), 150)
+                right_dir = rotate_vector((direction.x, direction.y), -150)
+
+                arrow_size = 5
+                left_end = (
+                    end[0] + left_dir[0] * arrow_size,
+                    end[1] + left_dir[1] * arrow_size
+                )
+                right_end = (
+                    end[0] + right_dir[0] * arrow_size,
+                    end[1] + right_dir[1] * arrow_size
+                )
+
+                # Нарисовать наконечник стрелки
+                draw.line([end, left_end], fill=(235,82,132), width=2)
+                draw.line([end, right_end], fill=(235,82,132), width=2)
+
+
     def DebugDrawLines(self, lines):
-        if(self.draw_with_max_border_polygon):
+        if(self.draw_with_max_border_polygon and self.max_border_polygon):
             min_x, min_y, max_x, max_y = self.find_bounding_square(self.max_border_polygon)
             width = int(max_x - min_x + 1)
             height = int(max_y - min_y + 1)
@@ -641,42 +705,6 @@ class UHeightMapGenerator:
         self.cook_image = image
 
         return image
-
-    def direction_from_point_to_polygon(self, polygon, point):
-        coords = list(polygon.exterior.coords)
-        point = Point(point)
-        min_distance = float('inf')
-        projection_point = None
-        closest_segment = None
-
-        for i in range(len(coords) - 1):
-            line_segment = [Point(coords[i]), Point(coords[i + 1])]
-            projection = self.project_point_onto_line_segment(point, line_segment)
-            distance = point.distance(projection)
-
-            if distance < min_distance:
-                min_distance = distance
-                projection_point = projection
-                closest_segment = LineString(line_segment)
-
-        return projection_point, closest_segment
-
-    def project_point_onto_line_segment(self, point, line_segment):
-        p1, p2 = line_segment
-        line_vec = np.array([p2.x - p1.x, p2.y - p1.y])
-        point_vec = np.array([point.x - p1.x, point.y - p1.y])
-
-        line_len_squared = np.dot(line_vec, line_vec)
-        if line_len_squared == 0:
-            return p1
-
-        t = np.dot(point_vec, line_vec) / line_len_squared
-        t = max(0, min(1, t))
-
-        projection_x = p1.x + t * line_vec[0]
-        projection_y = p1.y + t * line_vec[1]
-
-        return Point(projection_x, projection_y)
 
     def draw_two_color_line(self, draw, start, end, color1, color2, width=5, step=10):
         """
@@ -908,14 +936,14 @@ class UHeightMapGenerator:
                     if check_unborder:
                         G = self.create_graph_from_polygon(self.max_border_polygon, setting.hight_find_direction)
 
-                        projection_point, closest_segment =self.direction_from_point_to_polygon(self.max_border_polygon, line.points[0])
+                        projection_point, closest_segment = direction_from_point_to_polygon(self.max_border_polygon, line.points[0])
                         x_coordinate_start = projection_point.x
                         y_coordinate_start = projection_point.y
                         line.points.insert(0, (x_coordinate_start, y_coordinate_start))
 
                         start_vertex = self.find_closest_vertex(self.max_border_polygon, Point((x_coordinate_start, y_coordinate_start)))
 
-                        projection_point, closest_segment = self.direction_from_point_to_polygon(self.max_border_polygon, line.points[-1])
+                        projection_point, closest_segment = direction_from_point_to_polygon(self.max_border_polygon, line.points[-1])
                         x_coordinate_end = projection_point.x
                         y_coordinate_end = projection_point.y
                         line.points.append((x_coordinate_end, y_coordinate_end))
@@ -1052,11 +1080,9 @@ class UHeightMapGenerator:
                 rotation = slope_line_coord.rotation
                 closed_line, dist = self.octree_for_lines.nearest_neighbor_in_range(coord, self.max_distance_to_slope_line)
                 if(closed_line):
-                    projection_point, closest_segment = self.direction_from_point_to_polygon(
+                    projection_point, closest_segment = direction_from_point_to_polygon(
                         closed_line.shapely_polygon, coord)
-                    normal =  multiply_point_on_float(self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon),self.global_scale_multiplier )
-                    project_point = add_point(projection_point, normal)
-                    trace_to_setup_slope(project_point, rotation_to_vector(rotation), closed_line)
+                    trace_to_setup_slope(projection_point, rotation_to_vector(rotation), closed_line)
         else:
             k = 0
             for slope_line_coord in self.lines["Slope line"]:
@@ -1075,9 +1101,7 @@ class UHeightMapGenerator:
 
                 if(closed_line):
                     projection_point, closest_segment = self.direction_from_point_to_polygon(closed_line.shapely_polygon, coord)
-                    normal =  multiply_point_on_float(self.get_normal_from_segment(closest_segment, closed_line.shapely_polygon),self.global_scale_multiplier )
-                    project_point = add_point(projection_point, normal)
-                    trace_to_setup_slope(project_point, rotation_to_vector(rotation), closed_line)
+                    trace_to_setup_slope(projection_point, rotation_to_vector(rotation), closed_line)
 
         if self.guess_slope_direction_by_rivers:
             for water_line in self.lines["Water"]:
@@ -1107,10 +1131,7 @@ class UHeightMapGenerator:
                         intersection_circle_point = water_line.line_string.intersection(circle)
 
                         if (intersection_circle_point.geom_type == 'Point'):
-                            projection_point, closest_segment = self.direction_from_point_to_polygon(error_line.shapely_polygon, intersection_circle_point)
-                            normal = multiply_point_on_float(self.get_normal_from_segment(closest_segment, error_line.shapely_polygon), self.global_scale_multiplier)
-                            project_point = add_point(projection_point, normal)
-                            trace_to_setup_slope(project_point, substract_point(intersection, intersection_circle_point), error_line)
+                            trace_to_setup_slope(intersection, substract_point(intersection, intersection_circle_point), error_line)
 
                         elif intersection_circle_point.geom_type == "MultiPoint" or intersection_circle_point.geom_type == "LineString":
                             if(len(GetOnlyIntersectionRadiusPoint(intersection_circle_point)) == 0):
@@ -1138,8 +1159,7 @@ class UHeightMapGenerator:
                             if (error_line.shapely_polygon.contains(water_line.line_string)):
                                 error_line.slope_direction = "Inside"
                             else:
-                                if (error_line.shapely_polygon.contains(water_line.line_string)):
-                                    error_line.slope_direction = "Outside"
+                                error_line.slope_direction = "Outside"
 
                                 '''
                                 distance = 100000000
@@ -1318,12 +1338,12 @@ class UHeightMapGenerator:
 
                 if owner_line:
                     tmp_points = []
-                    owner_line_point, closest_segment = self.direction_from_point_to_polygon(owner_line.shapely_polygon, [point.x, point.y])
+                    owner_line_point, closest_segment = direction_from_point_to_polygon(owner_line.shapely_polygon, [point.x, point.y])
                     for child_line in owner_line.childs:
                         if isinstance(child_line, int):
                             print(child_line.childs)
                             continue
-                        child_line_point, closest_segment = self.direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
+                        child_line_point, closest_segment =direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
                         dist_to_point = child_line_point.distance(point)
                         if(dist_to_point < self.first_level_distance):
                             clamped_first_level_distance = clamp(self.first_level_distance, 1, min(child_line_point.distance(owner_line_point),self.first_level_distance ))

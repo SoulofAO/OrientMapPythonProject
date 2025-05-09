@@ -14,8 +14,8 @@ class ULine:
         self.start_points = points.copy()
         self.color = []
         self.correct_line = True;
-        self.power = 1.0
-        self.rotation = 1.0
+        self.power = float(power)
+        self.rotation = float(rotation)
         self.slope_direction = "None" #None, Inside, Outside
         self.GenerateColorByLines(seed)
 

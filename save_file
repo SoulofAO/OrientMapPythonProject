@@ -1,21 +1,16 @@
 {
-    "file_path": "C:/Users/sgsgg/Downloads/TestMapGeneratorV14.omap",
-    "global_scale_multiplier": 0.2,
+    "file_path": "C:/Users/sgsgg/Downloads/first_test_map_V2.omap",
+    "global_scale_multiplier": 0.5,
     "first_level_distance": 50,
-    "max_distance_to_border_polygon": 25,
+    "max_distance_to_border_polygon": 100,
     "draw_with_max_border_polygon": true,
     "remove_all_error_lines": false,
     "min_owner_overlap": 0.95,
-    "availible_parce_slope_line_setting": [
-        "Slope line, contour",
-        "Index contour",
-        "Slope line, index contour"
-    ],
     "draw_with_slope_line_color": true,
     "max_distance_to_slope_line": 20,
     "use_octree_to_fix_line": false,
     "use_octree_to_recive_slope_line": true,
-    "blend_slope_line": false,
+    "blend_slope_line": true,
     "seed": 1,
     "guess_slope_direction_by_rivers": true,
     "guess_slope_direction_by_rivers_range": 50,
@@ -23,22 +18,60 @@
     "guess_slope_direction_by_rivers_debug_draw": true,
     "guess_slope_direction_by_contour_line_angle": true,
     "guess_object_type_by_direct_indexes": true,
-    "optimize_line_point_count": true,
-    "optimize_line_point_percent": 20,
+    "optimize_line_point_count": false,
+    "optimize_line_point_percent": 40,
+    "slope_line_debug_draw": true,
     "fixing_lines_settings": [
         {
-            "max_merge_line_value": 20,
+            "max_merge_line_value": 5,
             "border_distance": 5,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": false,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true,
+            "use_normalize_blend_if_possible": true,
+            "enable_merge_with_self": true
+        },
+        {
+            "max_merge_line_value": 5,
+            "border_distance": 5,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": true,
+            "apply_merge_line_value": false,
+            "regenerate_borders": true,
+            "max_angle": 90,
+            "fix_unborder_if_both_point_unborder": true,
+            "use_normalize_blend_if_possible": true,
+            "enable_merge_with_self": true
+        },
+        {
+            "max_merge_line_value": 50,
+            "border_distance": 0,
+            "hight_find_direction": "both",
+            "apply_fix_unborder_lines": false,
+            "apply_merge_line_value": true,
+            "regenerate_borders": true,
+            "max_angle": 40,
+            "fix_unborder_if_both_point_unborder": true,
+            "use_normalize_blend_if_possible": true,
+            "enable_merge_with_self": true
+        },
+        {
+            "max_merge_line_value": 50,
+            "border_distance": 10,
             "hight_find_direction": "both",
             "apply_fix_unborder_lines": true,
             "apply_merge_line_value": true,
             "regenerate_borders": true,
-            "max_angle": 30,
+            "max_angle": 40,
             "fix_unborder_if_both_point_unborder": false,
+            "use_normalize_blend_if_possible": true,
             "enable_merge_with_self": true
         }
     ],
-    "availible_parce_contour_line_settings": [
+    "availible_parce_line_settings": [
         {
             "name": "Contour",
             "index": 1,
@@ -61,6 +94,11 @@
         },
         {
             "name": "Slope line, index contour",
+            "index": 1,
+            "type": "Slope line"
+        },
+        {
+            "name": "Slope line",
             "index": 1,
             "type": "Slope line"
         },

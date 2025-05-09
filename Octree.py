@@ -1,6 +1,8 @@
 import random
 import time
 import math
+from line import ULine
+from typing import Optional, Sequence, Dict, List,Tuple
 
 class UTestLine:
     def __init__(self, points):
@@ -123,9 +125,9 @@ class Octree:
     def nearest_neighbor(self, target):
         return self.root.nearest_neighbor_search(target)
 
-    def nearest_neighbor_in_range(self, target, radius):
+    def nearest_neighbor_in_range(self, target, radius) -> Tuple[Optional[ULine], float]:
         nearest_line, dist = self.root.nearest_neighbor_search(target)
-        if(dist<radius):
+        if dist < radius:
             return nearest_line, dist
         else:
             return None, -1.0
