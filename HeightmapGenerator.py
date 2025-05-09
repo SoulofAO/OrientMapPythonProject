@@ -1,3 +1,4 @@
+import OpenGLPlotHeightmapLibrary
 import line
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,6 +19,7 @@ from enum import Enum
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from shapely.ops import nearest_points
 from typing import Optional, Sequence, Dict, List
+import OpenGLPlotHeightmapLibrary
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
@@ -260,6 +262,12 @@ class UHeightMapGenerator:
         self.draw_debug_lines = True  # Режим отладки: отображение отладочных линий
         self.cook_image = None  # Изображение для отладки или вывода
 
+        if(OpenGLPlotHeightmapLibrary.check_execution_feasibility()):
+            self.draw_plot_height_map_on_GPU = True
+        else:
+            self.draw_plot_height_map_on_GPU = False
+        self.draw_plot_height_map_on_GPU_number_iterations = 1000
+
         # 4. Параметры обработки линий
         self.availible_parce_line_settings = [UAvailibleParceLineSettings("Contour","Contour", 1),
                                                       UAvailibleParceLineSettings("Index contour","Contour", 1),
@@ -331,7 +339,8 @@ class UHeightMapGenerator:
                          'use_octree_to_recive_slope_line',  'blend_slope_line', 'seed',
                          'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range', 'guess_slope_direction_by_intersect_rivers_trace_range',
                          'guess_slope_direction_by_rivers_debug_draw', 'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
-                         'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw']
+                         'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw',
+                         'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap',
@@ -340,7 +349,8 @@ class UHeightMapGenerator:
                             'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range',  'guess_slope_direction_by_intersect_rivers_trace_range',
                             'guess_slope_direction_by_rivers_debug_draw',
                             'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
-                            'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw']
+                            'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw',
+                            'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations']
 
 
 
@@ -1314,80 +1324,99 @@ class UHeightMapGenerator:
             return owner_line.GetSlopeDirectionDepthFromLineToUp()
 
     def DrawPlotHeightMap(self):
+        if(self.draw_plot_height_map_on_GPU and not OpenGLPlotHeightmapLibrary.check_execution_feasibility()):
+            self.draw_plot_height_map_on_GPU = False
+
         root_lines = line_library.GetRootLines(self.lines["Contour"])
         if(len(root_lines)<=0):
             return
         min_depth, max_depth = line_library.GetMinAndMaxSlopeDirectionDepthByLines(root_lines)
         print("Depth equal " + str(max_depth - min_depth))
-        image = Image.new("L",
-                          (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)),
-                          "black")
-        draw = ImageDraw.Draw(image)
+        image = None
+        if(self.draw_plot_height_map_on_GPU):
+            intenses = []
+            points_lines = []
+            for line in self.lines["Contour"]:
+                white_intensity = int(float((-min_depth +self.CalculateOwnerLineDepth(line)) / (max_depth - min_depth))*255)
+                intenses.append(white_intensity)
 
-        k = 0
-        for y in range(int(self.height + self.first_level_distance)):
-            for x in range(int(self.width + self.first_level_distance)):
-                self.progress_delegate.invoke("Generate Texture", int(k / (
-                            int(self.height + self.first_level_distance) * int(
-                        self.width + self.first_level_distance)) * 100))
-                point = Point(int(x + self.min_width - self.first_level_distance / 2),
-                              int(y + self.min_height - self.first_level_distance / 2))
+                line_points = []
+                for point in line.points:
+                    line_points.append([int(point[0] - self.min_width + self.first_level_distance / 2), int(point[1] - self.min_height + self.first_level_distance / 2)])
+                points_lines.append(line_points)
+            image = OpenGLPlotHeightmapLibrary.generate_heightmap_using_GPU(int(self.width + self.first_level_distance),
+                                                                    int(self.height + self.first_level_distance),
+                                                                    points_lines, intenses, self.draw_plot_height_map_on_GPU_number_iterations)
+        else:
+            image = Image.new("L",
+                              (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)),
+                              "black")
+            draw = ImageDraw.Draw(image)
 
-                owner_line = self.FindOwnerLine(point, root_lines)
-                intensity = -min_depth + self.CalculateOwnerLineDepth(owner_line)
+            k = 0
+            for y in range(int(self.height + self.first_level_distance)):
+                for x in range(int(self.width + self.first_level_distance)):
+                    self.progress_delegate.invoke("Generate Texture", int(k / (
+                                int(self.height + self.first_level_distance) * int(
+                            self.width + self.first_level_distance)) * 100))
+                    point = Point(int(x + self.min_width - self.first_level_distance / 2),
+                                  int(y + self.min_height - self.first_level_distance / 2))
 
-                if owner_line:
-                    tmp_points = []
-                    owner_line_point, closest_segment = direction_from_point_to_polygon(owner_line.shapely_polygon, [point.x, point.y])
-                    for child_line in owner_line.childs:
-                        if isinstance(child_line, int):
-                            print(child_line.childs)
-                            continue
-                        child_line_point, closest_segment =direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
-                        dist_to_point = child_line_point.distance(point)
-                        if(dist_to_point < self.first_level_distance):
-                            clamped_first_level_distance = clamp(self.first_level_distance, 1, min(child_line_point.distance(owner_line_point),self.first_level_distance ))
-                            if child_line.slope_direction == "Outside":
-                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
-                            elif child_line.slope_direction == "Inside":
-                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity - 1])
-                            else:
-                                tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
-                    sum_points = 0.0
-                    for l_point in tmp_points:
-                        sum_points = sum_points + l_point[1]
-                    sum_weight = 0.0
-                    lerp_multiply = 1.0
-                    for l_point in tmp_points:
-                        lerp_multiply = lerp_multiply * l_point[1]
-                        sum_weight = sum_weight + l_point[1]/sum_points * l_point[2]
-                    intensity = lerp_multiply * intensity + (1 - lerp_multiply) * sum_weight
+                    owner_line = self.FindOwnerLine(point, root_lines)
+                    intensity = -min_depth + self.CalculateOwnerLineDepth(owner_line)
 
-                else:
-                    sum_distance = 0.0
-                    for child in root_lines:
-                        min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
-                        if (min_distance_to_child_poligon < self.first_level_distance):
-                            sum_distance += min_distance_to_child_poligon
-                    intensity_sum = 0.0
-                    if (sum_distance != 0.0):
+                    if owner_line:
+                        tmp_points = []
+                        owner_line_point, closest_segment = direction_from_point_to_polygon(owner_line.shapely_polygon, [point.x, point.y])
+                        for child_line in owner_line.childs:
+                            if isinstance(child_line, int):
+                                print(child_line.childs)
+                                continue
+                            child_line_point, closest_segment =direction_from_point_to_polygon(child_line.shapely_polygon, [point.x, point.y])
+                            dist_to_point = child_line_point.distance(point)
+                            if(dist_to_point < self.first_level_distance):
+                                clamped_first_level_distance = clamp(self.first_level_distance, 1, min(child_line_point.distance(owner_line_point),self.first_level_distance ))
+                                if child_line.slope_direction == "Outside":
+                                    tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
+                                elif child_line.slope_direction == "Inside":
+                                    tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity - 1])
+                                else:
+                                    tmp_points.append([child_line_point,  dist_to_point/clamped_first_level_distance, intensity + 1])
+                        sum_points = 0.0
+                        for l_point in tmp_points:
+                            sum_points = sum_points + l_point[1]
+                        sum_weight = 0.0
+                        lerp_multiply = 1.0
+                        for l_point in tmp_points:
+                            lerp_multiply = lerp_multiply * l_point[1]
+                            sum_weight = sum_weight + l_point[1]/sum_points * l_point[2]
+                        intensity = lerp_multiply * intensity + (1 - lerp_multiply) * sum_weight
+
+                    else:
+                        sum_distance = 0.0
                         for child in root_lines:
                             min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
                             if (min_distance_to_child_poligon < self.first_level_distance):
-                                normalize_distance_to_child_poligon = clamp(
-                                    min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
-                                    (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
-                                if (child.slope_direction == "Outside"):
-                                    intensity_sum += normalize_distance_to_child_poligon
-                                elif (child.slope_direction == "Inside"):
-                                    intensity_sum -= normalize_distance_to_child_poligon
-                                else:
-                                    intensity_sum += normalize_distance_to_child_poligon
-                        intensity = intensity + intensity_sum
+                                sum_distance += min_distance_to_child_poligon
+                        intensity_sum = 0.0
+                        if (sum_distance != 0.0):
+                            for child in root_lines:
+                                min_distance_to_child_poligon = point.distance(child.shapely_polygon.exterior)
+                                if (min_distance_to_child_poligon < self.first_level_distance):
+                                    normalize_distance_to_child_poligon = clamp(
+                                        min_distance_to_child_poligon / sum_distance, 0, 1) * clamp(
+                                        (1 - min_distance_to_child_poligon / self.first_level_distance), 0, 1)
+                                    if (child.slope_direction == "Outside"):
+                                        intensity_sum += normalize_distance_to_child_poligon
+                                    elif (child.slope_direction == "Inside"):
+                                        intensity_sum -= normalize_distance_to_child_poligon
+                                    else:
+                                        intensity_sum += normalize_distance_to_child_poligon
+                            intensity = intensity + intensity_sum
 
-                white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
-                draw.point((int(x), int(y)), fill=white_intensity)
-                k = k + 1
+                    white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
+                    draw.point((int(x), int(y)), fill=white_intensity)
+                    k = k + 1
         self.cook_image = image
         self.progress_delegate.invoke("Complete", 100)
         return image
