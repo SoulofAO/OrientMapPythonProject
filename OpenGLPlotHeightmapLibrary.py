@@ -63,7 +63,7 @@ def generate_initial_lines(weight, height, points_lines, intenses):
     counter = 0
     for points_line in points_lines:
         flat_coords = [(int(point[0]), int(point[1])) for point in points_line]
-        draw.line(flat_coords, fill=intenses[counter], width=1)
+        draw.line(flat_coords, fill=int(intenses[counter])*255, width=1)
         counter += 1
 
     # Преобразуем изображение в массив NumPy с типом данных float32

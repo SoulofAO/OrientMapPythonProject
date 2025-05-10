@@ -269,7 +269,7 @@ class UHeightMapGenerator:
         self.draw_plot_height_map_on_GPU_number_iterations = 1000
 
         self.draw_with_heightmap_step = True
-        self.heightmap_step = 250
+        self.heightmap_step = 256
         self.max_heightmap_step = 65535
 
         # 4. Параметры обработки линий
@@ -1344,9 +1344,9 @@ class UHeightMapGenerator:
             points_lines = []
             for line in self.lines["Contour"]:
                 if(self.draw_with_heightmap_step):
-                    white_intensity = clamp(int(float((-min_depth +self.CalculateOwnerLineDepth(line))* self.heightmap_step/self.max_heightmap_step)*255),0,255)
+                    white_intensity = clamp(float((-min_depth +self.CalculateOwnerLineDepth(line))* self.heightmap_step/self.max_heightmap_step),0,1)
                 else:
-                    white_intensity = int(float((-min_depth +self.CalculateOwnerLineDepth(line)) / (max_depth - min_depth))*255)
+                    white_intensity = clamp(float((-min_depth +self.CalculateOwnerLineDepth(line)) / (max_depth - min_depth)),0,1)
                 intenses.append(white_intensity)
 
                 line_points = []
@@ -1423,9 +1423,9 @@ class UHeightMapGenerator:
                                         intensity_sum += normalize_distance_to_child_poligon
                             intensity = intensity + intensity_sum
                     if(self.draw_with_heightmap_step):
-                        white_intensity = clamp(int(intensity * 255 * self.heightmap_step/self.max_heightmap_step),0,255)
+                        white_intensity = clamp(intensity * self.heightmap_step/self.max_heightmap_step,0,1)
                     else:
-                        white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
+                        white_intensity = clamp(intensity/ (max_depth - min_depth),0,1)
                     draw.point((int(x), int(y)), fill=white_intensity)
                     k = k + 1
         self.cook_image = image

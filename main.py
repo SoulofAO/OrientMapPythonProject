@@ -8,27 +8,21 @@ import argparse
 
 heightmap_generator = UHeightMapGenerator()
 
-default_run = False
-default_file_path = "None"
-default_draw_with_heightmap_step = True
-default_heightmap_step = 250
-default_max_heightmap_step = 65535
+parser = argparse.ArgumentParser()
+parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], default=False,
+                    required=False)
+parser.add_argument('-f', '--default_file_path', default="None", required=False)
+parser.add_argument('-o', '--default_draw_with_heightmap_step', default=True, required=False)
+parser.add_argument('-g', '--default_heightmap_step', default=256, required=False)
+parser.add_argument('-j', '--default_max_heightmap_step', default=65535, required=False)
 
-if len(sys.argv) != 1:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], default= False, required=True)
-    parser.add_argument('-f', '--default_file_path', required=True)
-    parser.add_argument('-f', '--default_draw_with_heightmap_step ', required=True)
-    parser.add_argument('-f', '--default_heightmap_step', required=True)
-    parser.add_argument('-f', '--default_max_heightmap_step ', default=, required=True)
+args = parser.parse_args()
 
-    args = parser.parse_args()
-
-    default_run = args.default_run
-    default_file_path = args.default_file_path
-    default_draw_with_heightmap_step = args.default_draw_with_heightmap_step
-    default_heightmap_step = args.default_heightmap_step
-    default_max_heightmap_step = args.default_max_heightmap_step
+default_run = args.default_run
+default_file_path = args.default_file_path
+default_draw_with_heightmap_step = args.default_draw_with_heightmap_step
+default_heightmap_step = args.default_heightmap_step
+default_max_heightmap_step = args.default_max_heightmap_step
 
 if __name__ == "__main__":
     if(bool(default_run)):
