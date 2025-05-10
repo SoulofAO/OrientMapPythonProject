@@ -66,8 +66,6 @@ def generate_initial_lines(weight, height, points_lines, intenses):
         draw.line(flat_coords, fill=intenses[counter], width=1)
         counter += 1
 
-    image.save("resultV2.png")
-
     # Преобразуем изображение в массив NumPy с типом данных float32
     image_array = np.array(image, dtype=np.float32)
     image_array /= 255.0

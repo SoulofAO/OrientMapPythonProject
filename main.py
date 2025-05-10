@@ -8,17 +8,35 @@ import argparse
 
 heightmap_generator = UHeightMapGenerator()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], required=True)
-parser.add_argument('-f', '--default_file_path', required=True)
+default_run = False
+default_file_path = "None"
+default_draw_with_heightmap_step = True
+default_heightmap_step = 250
+default_max_heightmap_step = 65535
 
-args = parser.parse_args()
-print(args.default_run, args.default_file_path)
+if len(sys.argv) != 1:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], default= False, required=True)
+    parser.add_argument('-f', '--default_file_path', required=True)
+    parser.add_argument('-f', '--default_draw_with_heightmap_step ', required=True)
+    parser.add_argument('-f', '--default_heightmap_step', required=True)
+    parser.add_argument('-f', '--default_max_heightmap_step ', default=, required=True)
+
+    args = parser.parse_args()
+
+    default_run = args.default_run
+    default_file_path = args.default_file_path
+    default_draw_with_heightmap_step = args.default_draw_with_heightmap_step
+    default_heightmap_step = args.default_heightmap_step
+    default_max_heightmap_step = args.default_max_heightmap_step
 
 if __name__ == "__main__":
-    if(bool(args.default_run)):
-        heightmap_generator.file_path = args.default_file_path
+    if(bool(default_run)):
+        heightmap_generator.file_path = default_file_path
         heightmap_generator.draw_debug_lines = False
+        heightmap_generator.draw_with_heightmap_step = default_draw_with_heightmap_step
+        heightmap_generator.default_heightmap_step  = default_heightmap_step
+        heightmap_generator.max_heightmap_step = default_max_heightmap_step
 
         file_path = "default_save_file"
         if os.path.exists(file_path):
@@ -32,7 +50,8 @@ if __name__ == "__main__":
         try:
             heightmap_generator.MainLaunchOperations();
             print("Result : Sucsess")
-        except:
+        except Exception as e:
+            print("Error:", e)
             print("Result : Failed")
 
     else:

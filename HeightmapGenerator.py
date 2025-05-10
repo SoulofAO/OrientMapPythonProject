@@ -268,6 +268,10 @@ class UHeightMapGenerator:
             self.draw_plot_height_map_on_GPU = False
         self.draw_plot_height_map_on_GPU_number_iterations = 1000
 
+        self.draw_with_heightmap_step = True
+        self.heightmap_step = 250
+        self.max_heightmap_step = 65535
+
         # 4. Параметры обработки линий
         self.availible_parce_line_settings = [UAvailibleParceLineSettings("Contour","Contour", 1),
                                                       UAvailibleParceLineSettings("Index contour","Contour", 1),
@@ -340,7 +344,8 @@ class UHeightMapGenerator:
                          'guess_slope_direction_by_rivers', 'guess_slope_direction_by_rivers_range', 'guess_slope_direction_by_intersect_rivers_trace_range',
                          'guess_slope_direction_by_rivers_debug_draw', 'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
                          'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw',
-                         'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations']
+                         'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations',
+                         'draw_with_heightmap_step', 'heightmap_step', 'max_heightmap_step']
         self.ui_show_tag = ['global_scale_multiplier', 'first_level_distance',
                             'max_distance_to_border_polygon', 'draw_with_max_border_polygon',
                             'remove_all_error_lines','min_owner_overlap',
@@ -350,7 +355,8 @@ class UHeightMapGenerator:
                             'guess_slope_direction_by_rivers_debug_draw',
                             'guess_slope_direction_by_contour_line_angle', 'guess_object_type_by_direct_indexes',
                             'optimize_line_point_count','optimize_line_point_percent', 'slope_line_debug_draw',
-                            'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations']
+                            'draw_plot_height_map_on_GPU', 'draw_plot_height_map_on_GPU_number_iterations',
+                            'draw_with_heightmap_step', 'heightmap_step', 'max_heightmap_step']
 
 
 
@@ -1337,7 +1343,10 @@ class UHeightMapGenerator:
             intenses = []
             points_lines = []
             for line in self.lines["Contour"]:
-                white_intensity = int(float((-min_depth +self.CalculateOwnerLineDepth(line)) / (max_depth - min_depth))*255)
+                if(self.draw_with_heightmap_step):
+                    white_intensity = clamp(int(float((-min_depth +self.CalculateOwnerLineDepth(line))* self.heightmap_step/self.max_heightmap_step)*255),0,255)
+                else:
+                    white_intensity = int(float((-min_depth +self.CalculateOwnerLineDepth(line)) / (max_depth - min_depth))*255)
                 intenses.append(white_intensity)
 
                 line_points = []
@@ -1413,11 +1422,14 @@ class UHeightMapGenerator:
                                     else:
                                         intensity_sum += normalize_distance_to_child_poligon
                             intensity = intensity + intensity_sum
-
-                    white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
+                    if(self.draw_with_heightmap_step):
+                        white_intensity = clamp(int(intensity * 255 * self.heightmap_step/self.max_heightmap_step),0,255)
+                    else:
+                        white_intensity = clamp(int(intensity * 255 / (max_depth - min_depth)),0,255)
                     draw.point((int(x), int(y)), fill=white_intensity)
                     k = k + 1
         self.cook_image = image
+        image.save("result.png")
         self.progress_delegate.invoke("Complete", 100)
         return image
 
