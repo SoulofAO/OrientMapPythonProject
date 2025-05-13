@@ -24,7 +24,7 @@
     "draw_plot_height_map_on_GPU": true,
     "draw_plot_height_map_on_GPU_number_iterations": 2000,
     "draw_with_heightmap_step": true,
-    "heightmap_step": 10000,
+    "heightmap_step": 500,
     "max_heightmap_step": 65535,
     "fixing_lines_settings": [
         {

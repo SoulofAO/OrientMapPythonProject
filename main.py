@@ -12,8 +12,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], default=False,
                     required=False)
 parser.add_argument('-f', '--default_file_path', default="None", required=False)
-parser.add_argument('-o', '--default_draw_with_heightmap_step', default=True, required=False)
-parser.add_argument('-g', '--default_heightmap_step', default=256, required=False)
+parser.add_argument('-o', '--default_draw_with_heightmap_step', type=lambda x: x.lower() in ['true', '1', 'yes'], default=True, required=False)
+parser.add_argument('-g', '--default_heightmap_step', default=500, required=False)
 parser.add_argument('-j', '--default_max_heightmap_step', default=65535, required=False)
 
 args = parser.parse_args()
@@ -21,17 +21,11 @@ args = parser.parse_args()
 default_run = args.default_run
 default_file_path = args.default_file_path
 default_draw_with_heightmap_step = args.default_draw_with_heightmap_step
-default_heightmap_step = args.default_heightmap_step
-default_max_heightmap_step = args.default_max_heightmap_step
+default_heightmap_step = float(args.default_heightmap_step)
+default_max_heightmap_step = float(args.default_max_heightmap_step)
 
 if __name__ == "__main__":
     if(bool(default_run)):
-        heightmap_generator.file_path = default_file_path
-        heightmap_generator.draw_debug_lines = False
-        heightmap_generator.draw_with_heightmap_step = default_draw_with_heightmap_step
-        heightmap_generator.default_heightmap_step  = default_heightmap_step
-        heightmap_generator.max_heightmap_step = default_max_heightmap_step
-
         file_path = "default_save_file"
         if os.path.exists(file_path):
             with open(file_path, 'r') as file:
@@ -40,6 +34,12 @@ if __name__ == "__main__":
         else:
             print("Result : Failed")
             exit()
+
+        heightmap_generator.file_path = default_file_path
+        heightmap_generator.draw_debug_lines = False
+        heightmap_generator.draw_with_heightmap_step = default_draw_with_heightmap_step
+        heightmap_generator.heightmap_step  = default_heightmap_step
+        heightmap_generator.max_heightmap_step = default_max_heightmap_step
 
         try:
             heightmap_generator.MainLaunchOperations();

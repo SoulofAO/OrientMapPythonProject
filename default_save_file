@@ -1,9 +1,9 @@
 {
-    "file_path": "C:/Users/sgsgg/Downloads/first_test_map_V2.omap",
+    "file_path": "C:/Users/sgsgg/Downloads/TestMapGeneratorV25.omap",
     "global_scale_multiplier": 0.5,
     "first_level_distance": 50,
-    "max_distance_to_border_polygon": 50,
-    "draw_with_max_border_polygon": false,
+    "max_distance_to_border_polygon": 46,
+    "draw_with_max_border_polygon": true,
     "remove_all_error_lines": true,
     "min_owner_overlap": 0.95,
     "draw_with_slope_line_color": true,
@@ -22,7 +22,10 @@
     "optimize_line_point_percent": 40,
     "slope_line_debug_draw": true,
     "draw_plot_height_map_on_GPU": true,
-    "draw_plot_height_map_on_GPU_number_iterations": 1000,
+    "draw_plot_height_map_on_GPU_number_iterations": 2000,
+    "draw_with_heightmap_step": true,
+    "heightmap_step": 500,
+    "max_heightmap_step": 65535,
     "fixing_lines_settings": [
         {
             "max_merge_line_value": 5,
