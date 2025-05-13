@@ -20,6 +20,7 @@ from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from shapely.ops import nearest_points
 from typing import Optional, Sequence, Dict, List
 import OpenGLPlotHeightmapLibrary
+import imageio
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
@@ -541,47 +542,51 @@ class UHeightMapGenerator:
         return lines
 
     def SetupBorderPoligonsDataFromLines(self, border_distance):
-        """
-            Generated Border By Lines inside.
-        """
         points = []
         try:
             for line in self.lines["Contour"]:
-                for segment in line.start_points:
-                    points.append(segment)
+                points.extend(line.points)
         except:
             print("")
 
-
-
-        points = np.array(points)
-
-        unique_points = np.unique(points, axis=0)
+        unique_points = np.array(points)
+        unique_points = np.unique(unique_points, axis=0)
 
         if len(unique_points) < 3:
-            # Если точек меньше 3 или они лежат на одной прямой, используем LineString и создаем буфер
             line = LineString(unique_points)
             self.border_polygon = line.buffer(-1 * border_distance * self.global_scale_multiplier, join_style=2,
-                                              cap_style=2)  # cap_style=2 для плоских концов
-            self.max_border_polygon = line.buffer(self.max_distance_to_border_polygon * self.global_scale_multiplier, join_style=2, cap_style=2)
-
+                                              cap_style=2)
+            self.max_border_polygon = line.buffer(self.max_distance_to_border_polygon * self.global_scale_multiplier,
+                                                  join_style=2, cap_style=2)
         else:
-            # Находим минимальные и максимальные координаты по x и y
-            self.min_width = np.min(points[:, 0])
-            self.max_width = np.max(points[:, 0])
-            self.min_height = np.min(points[:, 1])
-            self.max_height = np.max(points[:, 1])
+            self._UpdateSizeDataFromCoords(points)
 
-            # Создаем выпуклую оболочку на основе всех точек отрезков
-            hull = ConvexHull(points)
-            hull_points = points[hull.vertices]  # Вершины выпуклой оболочки
-            original_polygon = Polygon(hull_points)  # Исходный полигон
+            hull = ConvexHull(unique_points)
+            hull_points = unique_points[hull.vertices]
+            original_polygon = Polygon(hull_points)
 
-            # 1. Создание уменьшенного полигона (border_polygon)
-            self.border_polygon = original_polygon.buffer(-1*border_distance, join_style=2)
-
-            # 2. Создание расширенного полигона (max_border_polygon)
+            self.border_polygon = original_polygon.buffer(-1 * border_distance, join_style=2)
             self.max_border_polygon = original_polygon.buffer(self.max_distance_to_border_polygon, join_style=2)
+
+    def _UpdateSizeDataFromCoords(self, coords):
+        if not coords:
+            self.min_width = self.max_width = self.min_height = self.max_height = self.width = self.height = 0
+            return
+
+        self.min_width = min(coord[0] for coord in coords)
+        self.max_width = max(coord[0] for coord in coords)
+        self.min_height = min(coord[1] for coord in coords)
+        self.max_height = max(coord[1] for coord in coords)
+        self.width = self.max_width - self.min_width
+        self.height = self.max_height - self.min_height
+
+    def SetupSizeDataFromLines(self):
+        coords = []
+        for line_by_type in self.lines:
+            for line in self.lines[line_by_type]:
+                coords.extend(line.points)
+
+        self._UpdateSizeDataFromCoords(coords)
 
     def find_bounding_square(self, polygon):
         """
@@ -612,20 +617,6 @@ class UHeightMapGenerator:
 
         return min_x, min_y, max_x, max_y
 
-    def SetupSizeDataFromLines(self, lines_by_type):
-        coords = []
-        for type in lines_by_type:
-            for line in lines_by_type[type]:
-                for coord in line["coords_list"]:
-                    coords.append(coord)
-
-        self.min_width = min(coord[0] for coord in coords)
-        self.max_width = max(coord[0] for coord in coords)
-        self.min_height = min(coord[1] for coord in coords)
-        self.max_height = max(coord[1] for coord in coords)
-
-        self.width = self.max_width - self.min_width
-        self.height = self.max_height - self.min_height
 
     def draw_polygon(self, draw, polygon, offset_x, offset_y, color, width=2):
         x, y = polygon.exterior.xy
@@ -717,7 +708,7 @@ class UHeightMapGenerator:
 
             self.draw_polygon(draw, self.max_border_polygon, offset_x, offset_y, "green")
 
-        image.save("lines_image.png")
+        image.save("result.png")
         self.cook_image = image
 
         return image
@@ -823,7 +814,6 @@ class UHeightMapGenerator:
         return [G.nodes[i]['coord'] for i in path]
 
     def GenerateLinesByLineData(self,lines_by_type):
-        self.SetupSizeDataFromLines(lines_by_type)
         return self.GeneratedLineByCoords(lines_by_type)
 
     def FixMergeNearLines(self, setting:UFixingLinesSettings):
@@ -902,25 +892,18 @@ class UHeightMapGenerator:
 
                     if optimal_line_to_merge_index == -2:  # Линия замыкает сама себя
                         line.points.append(line.points[0])  # Добавляем первую точку в конец для замыкания
-                        line.start_points.append(line.points[0])
                         answer_lines.append(line)
                         del availible_lines[0]
                     elif optimal_line_to_merge_index != -1:
-                        # Соединение линий
                         line_to_merge = availible_lines[optimal_line_to_merge_index]
-
                         if optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == 0:
                             line.points =  line_to_merge.points[::-1] + line.points
-                            line.start_points = line_to_merge.start_points[::-1] + line.start_points
                         elif optimal_start_point_to_merge_index == 0 and optimal_end_point_to_merge_index == - 1:
                             line.points = line_to_merge.points + line.points
-                            line.start_points = line.start_points + line_to_merge.start_points[::-1]
                         elif optimal_start_point_to_merge_index == - 1 and optimal_end_point_to_merge_index == - 1:
                             line.points = line.points + line_to_merge.points[::-1]
-                            line.start_points = line.start_points + line_to_merge.start_points[::-1]
                         elif optimal_start_point_to_merge_index == -1 and optimal_end_point_to_merge_index == 0:
                             line.points = line.points + line_to_merge.points
-                            line.start_points = line.start_points + line_to_merge.start_points
 
                         del availible_lines[optimal_line_to_merge_index]
                     else:
@@ -1271,10 +1254,15 @@ class UHeightMapGenerator:
                 new_line.correct_line = True
                 self.lines[type].append(new_line)
 
+        self.SetupSizeDataFromLines()
         self.SetupBorderPoligonsDataFromLines(-2)
         if (self.optimize_line_point_count):
+            lines_by_type = {}
+            lines_by_type["Contour"] = []
             for line in self.lines["Contour"]:
                 line_library.simplify_line_by_percent(line, self.optimize_line_point_percent)
+                lines_by_type["Contour"].append(line.points)
+
         if(self.use_octree_to_fix_line):
             self.GeneratedOctree()
         self.fix_line_index = 0
@@ -1304,6 +1292,8 @@ class UHeightMapGenerator:
 
         if(self.remove_all_error_lines):
             self.RemoveAllErrorLines()
+
+        self.SetupSizeDataFromLines()
 
         self.progress_delegate.invoke("All preparations are completed", 100)
 
@@ -1353,11 +1343,11 @@ class UHeightMapGenerator:
                 for point in line.points:
                     line_points.append([int(point[0] - self.min_width + self.first_level_distance / 2), int(point[1] - self.min_height + self.first_level_distance / 2)])
                 points_lines.append(line_points)
-            image = OpenGLPlotHeightmapLibrary.generate_heightmap_using_GPU(int(self.width + self.first_level_distance),
-                                                                    int(self.height + self.first_level_distance),
+            image = OpenGLPlotHeightmapLibrary.generate_heightmap_using_GPU(int(self.width + self.first_level_distance + 1),
+                                                                    int(self.height + self.first_level_distance + 1),
                                                                     points_lines, intenses, self.draw_plot_height_map_on_GPU_number_iterations)
         else:
-            image = Image.new("L",
+            image = Image.new("F",
                               (int(self.width + self.first_level_distance), int(self.height + self.first_level_distance)),
                               "black")
             draw = ImageDraw.Draw(image)
@@ -1429,7 +1419,14 @@ class UHeightMapGenerator:
                     draw.point((int(x), int(y)), fill=white_intensity)
                     k = k + 1
         self.cook_image = image
-        image.save("result.png")
+
+        array = np.array(image)
+        normalized = 255 * array
+        image_uint8 = Image.fromarray(normalized.astype(np.uint8), mode='L')
+        image_uint8.save('result.png')
+
+        image_np = np.array(image, dtype=np.float32)
+        imageio.imwrite("result.exr", image_np, format="EXR")
         self.progress_delegate.invoke("Complete", 100)
         return image
 

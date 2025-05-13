@@ -6,6 +6,7 @@ import glfw
 from typing import Optional, Sequence, Dict, List
 from line import ULine
 import pandas as pd
+from skimage.draw import line as sk_line
 
 def check_execution_feasibility():
     print("Проверка теоретической возможности выполнения кода...")
@@ -58,17 +59,14 @@ def check_execution_feasibility():
 
 
 def generate_initial_lines(weight, height, points_lines, intenses):
-    image = Image.new("L", (weight, height), 0)  # 0 — чёрный фон
-    draw = ImageDraw.Draw(image)
-    counter = 0
-    for points_line in points_lines:
-        flat_coords = [(int(point[0]), int(point[1])) for point in points_line]
-        draw.line(flat_coords, fill=int(intenses[counter])*255, width=1)
-        counter += 1
+    image_array = np.zeros((height, weight), dtype=np.float32)
 
-    # Преобразуем изображение в массив NumPy с типом данных float32
-    image_array = np.array(image, dtype=np.float32)
-    image_array /= 255.0
+    for counter, points_line in enumerate(points_lines):
+        for i in range(len(points_line) - 1):
+            x0, y0 = int(points_line[i][0]), int(points_line[i][1])
+            x1, y1 = int(points_line[i + 1][0]), int(points_line[i + 1][1])
+            rr, cc = sk_line(y0, x0, y1, x1)  # skimage uses (row, col) = (y, x)
+            image_array[rr, cc] = float(intenses[counter])  # значение может быть от 0.0 до 1.0
 
     return image_array
 
@@ -96,9 +94,6 @@ def generate_heightmap_using_GPU(weight, height, points_lines, intenses, iterati
 
    fb_a = ctx.framebuffer(color_attachments=[tex_a])
    fb_b = ctx.framebuffer(color_attachments=[tex_b])
-
-
-
 
    # Шейдерная программа
    prog = ctx.program(
@@ -141,8 +136,7 @@ def generate_heightmap_using_GPU(weight, height, points_lines, intenses, iterati
        tex_a, tex_b = tex_b, tex_a
        fb_a, fb_b = fb_b, fb_a
 
-   # Считываем результат
    result = np.frombuffer(tex_a.read(), dtype=np.float32).reshape((height, weight))
-   image = Image.fromarray((result * 255).astype(np.uint8))
+   image = Image.fromarray(result, mode='F')
    glfw.terminate()
    return image

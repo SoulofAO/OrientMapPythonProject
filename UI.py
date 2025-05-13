@@ -336,8 +336,8 @@ class UHeightmapGeneratorUI(QMainWindow):
                 self.line_color_transcription_label.setVisible(True)
             else:
                 self.line_color_transcription_label.setVisible(False)
-            save_path = "output_image.png"  # или другой путь и имя файла
-            self.settings.cook_image.save(save_path)
+            save_path = "result.png"  # или другой путь и имя файла
+
             loaded_pixmap = QPixmap(save_path)
             self.image_label.setPixmap(loaded_pixmap)
             self.UpdateLines()

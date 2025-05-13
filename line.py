@@ -11,7 +11,6 @@ class ULine:
         self.shapely_polygon: Optional[Polygon] = shapely_polygon
         self.line_string : Optional[LineString] = line_string
         self.points = points.copy()
-        self.start_points = points.copy()
         self.color = []
         self.correct_line = True;
         self.power = float(power)
