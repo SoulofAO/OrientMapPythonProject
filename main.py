@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--default_run', type=lambda x: x.lower() in ['true', '1', 'yes'], default=False,
                     required=False)
 parser.add_argument('-f', '--default_file_path', default="None", required=False)
+parser.add_argument('-k', '--default_border', default=1, required=False)
 parser.add_argument('-o', '--default_draw_with_heightmap_step', type=lambda x: x.lower() in ['true', '1', 'yes'], default=True, required=False)
 parser.add_argument('-g', '--default_heightmap_step', default=500, required=False)
 parser.add_argument('-j', '--default_max_heightmap_step', default=65535, required=False)
@@ -23,6 +24,7 @@ default_file_path = args.default_file_path
 default_draw_with_heightmap_step = args.default_draw_with_heightmap_step
 default_heightmap_step = float(args.default_heightmap_step)
 default_max_heightmap_step = float(args.default_max_heightmap_step)
+default_default_border = float(args.default_border)
 
 if __name__ == "__main__":
     if(bool(default_run)):
@@ -40,6 +42,8 @@ if __name__ == "__main__":
         heightmap_generator.draw_with_heightmap_step = default_draw_with_heightmap_step
         heightmap_generator.heightmap_step  = default_heightmap_step
         heightmap_generator.max_heightmap_step = default_max_heightmap_step
+        heightmap_generator.first_level_distance = default_default_border
+        heightmap_generator.max_distance_to_border_polygon = default_default_border
 
         try:
             heightmap_generator.MainLaunchOperations();

@@ -678,11 +678,11 @@ class UHeightMapGenerator:
                 draw.line([end, right_end], fill=(235,82,132), width=2)
 
 
-    def DebugDrawLines(self, lines):
+    def DebugDrawLines(self):
         if(self.draw_with_max_border_polygon and self.max_border_polygon):
             min_x, min_y, max_x, max_y = self.find_bounding_square(self.max_border_polygon)
-            width = int(max_x - min_x + 1)
-            height = int(max_y - min_y + 1)
+            width = int(max_x - min_x )
+            height = int(max_y - min_y)
         else:
             min_x = self.min_width
             max_x = self.max_width
@@ -1353,8 +1353,8 @@ class UHeightMapGenerator:
             draw = ImageDraw.Draw(image)
 
             k = 0
-            for y in range(int(self.height + self.first_level_distance)):
-                for x in range(int(self.width + self.first_level_distance)):
+            for y in range(int(self.height + self.first_level_distance + 1)):
+                for x in range(int(self.width + self.first_level_distance + 1)):
                     self.progress_delegate.invoke("Generate Texture", int(k / (
                                 int(self.height + self.first_level_distance) * int(
                             self.width + self.first_level_distance)) * 100))
@@ -1435,7 +1435,7 @@ class UHeightMapGenerator:
             lines_by_type = self.ImportNewFile()
             self.GenerateLinesByLineData(lines_by_type)
             if (self.draw_debug_lines):
-                self.DebugDrawLines(self.lines["Contour"])
+                self.DebugDrawLines()
                 self.end_cook_delegate.invoke()
             else:
                 self.DrawPlotHeightMap()
